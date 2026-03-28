@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+nohup.out
+
+# Temp files
+*.exe_extracted/
+*_pyz/
+/tmp/
+*.backup
+
+# Config
+maingui-settings.json
+token.json
+stats.json
+
+# Sisyphus internal
+.sisyphus/
+
+# Original EXE files
+*.exe

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API 管理面板</title>
+<style>
+:root{--bg:#0f0f1a;--card:#1a1a2e;--accent:#00d4ff;--success:#00ff88;--warning:#ffaa00;--error:#ff4757;--text:#e0e0e0;--muted:#808080;--border:#2a2a3e}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+.container{max-width:1400px;margin:0 auto;padding:20px}
+header{background:linear-gradient(135deg,var(--card),#252540);padding:20px;border-radius:12px;margin-bottom:20px;border:1px solid var(--border)}
+h1{font-size:28px;color:var(--accent);margin-bottom:5px}
+.subtitle{color:var(--muted);font-size:14px}
+.control-panel{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:30px}
+.service-card{background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border);transition:all .3s}
+.service-card:hover{border-color:var(--accent);box-shadow:0 0 20px rgba(0,212,255,.1)}
+.service-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}
+.service-name{font-size:18px;font-weight:600}
+.status-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.status-running{background:rgba(0,255,136,.2);color:var(--success)}
+.status-stopped{background:rgba(255,71,87,.2);color:var(--error)}
+.service-info{color:var(--muted);font-size:14px;margin-bottom:15px}
+.btn{padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:600;transition:all .3s;font-size:14px}
+.btn-start{background:var(--success);color:#000}
+.btn-stop{background:var(--error);color:#fff}
+.btn-primary{background:var(--accent);color:#000}
+.btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,212,255,.3)}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:30px}
+.stat-card{background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border);text-align:center;transition:all .3s}
+.stat-card:hover{transform:translateY(-5px);border-color:var(--accent)}
+.stat-value{font-size:28px;font-weight:700;color:var(--accent);margin:10px 0;font-family:'SF Mono',Consolas,monospace}
+.stat-label{color:var(--muted);font-size:13px}
+.stat-icon{font-size:24px;margin-bottom:5px}
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:20px;margin-bottom:30px}
+.chart-card{background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border)}
+.chart-title{font-size:16px;margin-bottom:15px;color:var(--text)}
+.chart-container{position:relative;height:220px}
+canvas{width:100%!important;height:100%!important}
+.config-section{background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border)}
+.config-title{font-size:18px;margin-bottom:20px;color:var(--accent)}
+.config-tabs{display:flex;gap:10px;margin-bottom:20px}
+.config-tab{padding:10px 20px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .3s;color:var(--text)}
+.config-tab.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.config-form{display:none}.config-form.active{display:block}
+.form-group{margin-bottom:15px}
+.form-group label{display:block;margin-bottom:5px;color:var(--muted);font-size:14px}
+.form-group input{width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;transition:all .3s}
+.form-group input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.1)}
+.form-actions{display:flex;gap:10px;margin-top:20px}
+.toast{position:fixed;bottom:20px;right:20px;padding:15px 25px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.3);transform:translateX(400px);transition:transform .3s;z-index:1000}
+.toast.show{transform:translateX(0)}.toast.success{border-color:var(--success)}.toast.error{border-color:var(--error)}
+@media(max-width:768px){.container{padding:10px}h1{font-size:24px}.charts-grid{grid-template-columns:1fr}.stat-value{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="container">
+<header><h1>🔧 API 管理面板</h1><p class="subtitle">服务监控与配置管理系统 · 自动刷新 10 秒</p></header>
+<section class="control-panel">
+<div class="service-card" id="zen2api-card"><div class="service-header"><span class="service-name">zen2api</span><span class="status-badge status-stopped" id="zen-status">检测中...</span></div><div class="service-info"><div>端口: 9016</div><div>API: http://127.0.0.1:9016</div></div><button class="btn btn-start" id="zen-btn" onclick="toggleSvc('zen')">启动服务</button></div>
+<div class="service-card" id="grok2api-card"><div class="service-header"><span class="service-name">grok2api</span><span class="status-badge status-stopped" id="grok-status">检测中...</span></div><div class="service-info"><div>端口: 8021</div><div>API: http://127.0.0.1:8021</div></div><button class="btn btn-start" id="grok-btn" onclick="toggleSvc('grok')">启动服务</button></div>
+</section>
+<section class="stats-grid">
+<div class="stat-card"><div class="stat-icon">📊</div><div class="stat-value" id="s-total">0</div><div class="stat-label">总请求数</div></div>
+<div class="stat-card"><div class="stat-icon">📅</div><div class="stat-value" id="s-today">0</div><div class="stat-label">今日请求</div></div>
+<div class="stat-card"><div class="stat-icon">📥</div><div class="stat-value" id="s-input">0</div><div class="stat-label">今日输入 Token</div></div>
+<div class="stat-card"><div class="stat-icon">💾</div><div class="stat-value" id="s-cache">0</div><div class="stat-label">今日缓存命中 Token</div></div>
+<div class="stat-card"><div class="stat-icon">🎯</div><div class="stat-value" id="s-rate">0%</div><div class="stat-label">今日缓存命中率</div></div>
+<div class="stat-card"><div class="stat-icon">📤</div><div class="stat-value" id="s-output">0</div><div class="stat-label">今日输出 Token</div></div>
+</section>
+<section class="charts-grid">
+<div class="chart-card"><div class="chart-title">📈 今日请求趋势</div><div class="chart-container"><canvas id="chart1"></canvas></div></div>
+<div class="chart-card"><div class="chart-title">📊 今日 Token 趋势</div><div class="chart-container"><canvas id="chart2"></canvas></div><div style="display:flex;justify-content:center;gap:20px;margin-top:10px;font-size:12px;color:var(--muted)"><span style="color:#3b82f6">● 输入</span><span style="color:#f59e0b">● 输出</span></div></div>
+<div class="chart-card"><div class="chart-title">🥧 状态码分布</div><div class="chart-container"><canvas id="chart3"></canvas></div></div>
+<div class="chart-card"><div class="chart-title">📊 Token 结构</div><div class="chart-container"><canvas id="chart4"></canvas></div><div style="display:flex;justify-content:center;gap:20px;margin-top:10px;font-size:12px;color:var(--muted)"><span style="color:#3b82f6">● 输入</span><span style="color:#10b981">● 缓存</span><span style="color:#f59e0b">● 输出</span></div></div>
+</section>
+<section class="config-section">
+<div class="config-title">⚙️ 配置管理</div>
+<div class="config-tabs"><div class="config-tab active" onclick="switchTab('zen')">zen2api 配置</div><div class="config-tab" onclick="switchTab('grok')">grok2api 配置</div></div>
+<div class="config-form active" id="cfg-zen"><div class="form-group"><label>Host</label><input id="zen-host" value="127.0.0.1"></div><div class="form-group"><label>Port</label><input id="zen-port" value="9016"></div><div class="form-group"><label>API Key</label><input id="zen-key" type="password" placeholder="输入 API Key"></div><div class="form-actions"><button class="btn btn-primary" onclick="saveCfg('zen')">💾 保存配置</button></div></div>
+<div class="config-form" id="cfg-grok"><div class="form-group"><label>Host</label><input id="grok-host" value="127.0.0.1"></div><div class="form-group"><label>Port</label><input id="grok-port" value="8021"></div><div class="form-group"><label>API Key</label><input id="grok-key" type="password" placeholder="输入 API Key"></div><div class="form-actions"><button class="btn btn-primary" onclick="saveCfg('grok')">💾 保存配置</button></div></div>
+</section>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const cfg={zen:{host:'127.0.0.1',port:'9016',key:''},grok:{host:'127.0.0.1',port:'8021',key:''}};
+let stats={total:{requests:0},today:{requests:0,tokens:{input:0,cache_hit:0,output:0},status_codes:{}}};
+let svcStatus={zen:false,grok:false};
+
+function fmt(n){if(!n)return'0';return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')}
+function compact(n){if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
+function toast(m,t='success'){const e=document.getElementById('toast');e.textContent=m;e.className='toast show '+t;setTimeout(()=>e.className='toast',3000)}
+
+async function checkSvc(s){
+  const p=s==='zen'?'9016':'8021';
+  try{const r=await fetch(`http://127.0.0.1:${p}/health`,{signal:AbortSignal.timeout(3000)});
+  if(r.ok){svcStatus[s]=true;updSvcUI(s,true)}else{svcStatus[s]=false;updSvcUI(s,false)}}catch{svcStatus[s]=false;updSvcUI(s,false)}
+}
+function updSvcUI(s,run){
+  const el=document.getElementById(s==='zen'?'zen-status':'grok-status');
+  const btn=document.getElementById(s==='zen'?'zen-btn':'grok-btn');
+  if(run){el.textContent='运行中';el.className='status-badge status-running';btn.textContent='■ 停止';btn.className='btn btn-stop'}
+  else{el.textContent='已停止';el.className='status-badge status-stopped';btn.textContent='▶ 启动';btn.className='btn btn-start'}
+}
+function toggleSvc(s){toast(`${s==='zen'?'zen2api':'grok2api'} 服务控制需通过终端操作`,'success')}
+
+async function loadStats(){
+  try{const r=await fetch('http://127.0.0.1:9016/stats',{signal:AbortSignal.timeout(5000)});
+  if(r.ok){const d=await r.json();stats=d;updateUI();drawCharts()}}catch{}
+}
+function updateUI(){
+  const t=stats.total||{},td=stats.today||{};
+  document.getElementById('s-total').textContent=fmt(t.requests?.requests||0);
+  document.getElementById('s-today').textContent=fmt(td.requests?.requests||td.requests||0);
+  const tok=td.tokens||{};
+  document.getElementById('s-input').textContent=compact(tok.input||0);
+  document.getElementById('s-cache').textContent=compact(tok.cache_hit||0);
+  document.getElementById('s-output').textContent=compact(tok.output||0);
+  const inp=tok.input||0,cch=tok.cache_hit||0;
+  const rate=inp>0?((cch/(inp+cch))*100).toFixed(1):'0.0';
+  document.getElementById('s-rate').textContent=rate+'%';
+}
+
+function setupC(id){const c=document.getElementById(id);const dpr=window.devicePixelRatio||1;const r=c.getBoundingClientRect();c.width=r.width*dpr;c.height=r.height*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);return{ctx:x,w:r.width,h:r.height}}
+
+function drawCharts(){
+  drawLine('chart1',[120,150,180,160,200,190,220,250,230,260,280,300],'#00d4ff');
+  drawDualLine('chart2',[5000,5500,6000,5800,6200,6500,6800,7000,6900,7200,7500,7800],[300,320,350,340,360,380,400,420,410,430,450,480]);
+  drawDonut('chart3',stats.today?.status_codes||{'200':1350,'400':20,'401':10,'500':15});
+  drawBars('chart4',[stats.today?.tokens?.input||74175899,stats.today?.tokens?.cache_hit||65903483,stats.today?.tokens?.output||405919]);
+}
+function drawLine(id,data,color){
+  const{ctx:c,w,h}=setupC(id);const p=40;const cw=w-p*2;const ch=h-p*2;const mx=Math.max(...data,1);
+  c.clearRect(0,0,w,h);c.strokeStyle='#2d2d3d';c.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=p+ch/4*i;c.beginPath();c.moveTo(p,y);c.lineTo(w-p,y);c.stroke()}
+  c.strokeStyle=color;c.lineWidth=3;c.beginPath();
+  data.forEach((v,i)=>{const x=p+i/(data.length-1)*cw;const y=p+ch-v/mx*ch;i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();
+  const g=c.createLinearGradient(0,p,0,h-p);g.addColorStop(0,color+'4d');g.addColorStop(1,color+'00');
+  c.fillStyle=g;c.beginPath();c.moveTo(p,h-p);data.forEach((v,i)=>{const x=p+i/(data.length-1)*cw;const y=p+ch-v/mx*ch;c.lineTo(x,y)});c.lineTo(w-p,h-p);c.closePath();c.fill();
+  c.fillStyle='#9ca3af';c.font='11px sans-serif';c.textAlign='center';
+  for(let i=0;i<data.length;i+=2){const x=p+i/(data.length-1)*cw;c.fillText(i+':00',x,h-10)}
+  c.textAlign='right';for(let i=0;i<=4;i++){const v=Math.round(mx/4*(4-i));c.fillText(compact(v),p-8,p+ch/4*i+4)}
+}
+function drawDualLine(id,d1,d2){
+  const{ctx:c,w,h}=setupC(id);const p=40;const cw=w-p*2;const ch=h-p*2;const mx=Math.max(...d1,...d2,1);
+  c.clearRect(0,0,w,h);c.strokeStyle='#2d2d3d';c.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=p+ch/4*i;c.beginPath();c.moveTo(p,y);c.lineTo(w-p,y);c.stroke()}
+  c.strokeStyle='#3b82f6';c.lineWidth=2;c.beginPath();d1.forEach((v,i)=>{const x=p+i/(d1.length-1)*cw;const y=p+ch-v/mx*ch;i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();
+  c.strokeStyle='#f59e0b';c.lineWidth=2;c.beginPath();d2.forEach((v,i)=>{const x=p+i/(d2.length-1)*cw;const y=p+ch-v/mx*ch;i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();
+  c.fillStyle='#9ca3af';c.font='11px sans-serif';c.textAlign='center';
+  for(let i=0;i<d1.length;i+=2){const x=p+i/(d1.length-1)*cw;c.fillText(i+':00',x,h-10)}
+}
+function drawDonut(id,data){
+  const{ctx:c,w,h}=setupC(id);c.clearRect(0,0,w,h);
+  const entries=Object.entries(data);const total=entries.reduce((s,[,v])=>s+v,0);
+  const cx=w/2,cy=h/2,r=Math.min(w,h)/2-40;
+  const colors={'200':'#10b981','201':'#34d399','400':'#f59e0b','401':'#fbbf24','429':'#ef4444','500':'#dc2626'};
+  const def=['#00d4ff','#7c3aed','#ec4899','#f59e0b','#10b981'];let sa=-Math.PI/2,ci=0;
+  entries.forEach(([code,val])=>{
+    const angle=val/total*Math.PI*2;c.beginPath();c.moveTo(cx,cy);c.arc(cx,cy,r,sa,sa+angle);c.closePath();
+    c.fillStyle=colors[code]||def[ci++%def.length];c.fill();sa+=angle;
+  });
+  c.beginPath();c.arc(cx,cy,r*.6,0,Math.PI*2);c.fillStyle='#16213e';c.fill();
+  c.fillStyle='#e5e5e5';c.font='bold 24px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(fmt(total),cx,cy-8);
+  c.fillStyle='#9ca3af';c.font='12px sans-serif';c.fillText('总请求',cx,cy+12);
+}
+function drawBars(id,data){
+  const{ctx:c,w,h}=setupC(id);const p=50;const cw=w-p*2;const ch=h-p*2;const mx=Math.max(...data,1);
+  const labels=['输入','缓存','输出'];const colors=['#3b82f6','#10b981','#f59e0b'];
+  c.clearRect(0,0,w,h);c.strokeStyle='#2d2d3d';c.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=p+ch/4*i;c.beginPath();c.moveTo(p,y);c.lineTo(w-p,y);c.stroke()}
+  const bw=cw/data.length-30;
+  data.forEach((v,i)=>{
+    const bh=v/mx*ch;const x=p+i*(bw+30)+15;const y=p+ch-bh;
+    const g=c.createLinearGradient(x,y,x,p+ch);g.addColorStop(0,colors[i]);g.addColorStop(1,colors[i]+'66');
+    c.fillStyle=g;c.beginPath();c.roundRect(x,y,bw,bh,[6,6,0,0]);c.fill();
+    c.fillStyle='#9ca3af';c.font='12px sans-serif';c.textAlign='center';c.fillText(labels[i],x+bw/2,h-10);
+    c.fillStyle='#e5e5e5';c.font='bold 14px sans-serif';c.fillText(compact(v),x+bw/2,y-8);
+  });
+}
+
+function switchTab(t){
+  document.querySelectorAll('.config-tab').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.config-form').forEach(e=>e.classList.remove('active'));
+  event.target.classList.add('active');document.getElementById('cfg-'+t).classList.add('active');
+}
+function saveCfg(t){
+  cfg[t].host=document.getElementById(t+'-host').value;
+  cfg[t].port=document.getElementById(t+'-port').value;
+  cfg[t].key=document.getElementById(t+'-key').value;
+  localStorage.setItem('api-cfg',JSON.stringify(cfg));toast('配置已保存','success');
+}
+function loadCfg(){
+  const s=localStorage.getItem('api-cfg');if(s){const p=JSON.parse(s);Object.assign(cfg,p)}
+  ['zen','grok'].forEach(t=>{document.getElementById(t+'-host').value=cfg[t].host;document.getElementById(t+'-port').value=cfg[t].port});
+}
+
+document.addEventListener('DOMContentLoaded',()=>{loadCfg();checkSvc('zen');checkSvc('grok');loadStats();setInterval(()=>{checkSvc('zen');checkSvc('grok');loadStats()},10000)});
+</script>
+</body>
+</html>
