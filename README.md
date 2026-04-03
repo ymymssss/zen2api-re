@@ -1,6 +1,6 @@
 # API 代理服务 - 跨平台版
 
-将原本的 Windows EXE 工具逆向为可在 **Linux / Ubuntu / Termux** 上运行的 Python 应用。
+将原本的ai 工具逆向为可在 **Linux / Ubuntu / Termux** 上运行的 Python 应用。
 
 ## 项目说明
 
@@ -62,7 +62,7 @@ cd zen2api && ./start.sh &
 # 启动 grok2api
 cd grok2api && ./start.sh &
 
-# 启动 Web 管理面板
+# 启动 Web 管理面板(暂时不完善）
 cd webui && python3 -m http.server 8081 &
 ```
 
@@ -140,8 +140,8 @@ curl http://127.0.0.1:8021/v1/models
 打开 http://127.0.0.1:8081 即可使用中文管理面板：
 
 - **服务控制**：查看 zen2api / grok2api 运行状态
-- **统计仪表盘**：总请求数、今日请求、Token 用量、缓存命中率
-- **数据图表**：请求趋势、Token 趋势、状态码分布、Token 结构
+- **统计仪表盘**：总请求数、今日请求、Token 用量、缓存命中率（不完善）
+- **数据图表**：请求趋势、Token 趋势、状态码分布、Token 结构（不完善）
 - **配置管理**：在线修改 Host / Port / API Key
 
 ## 目录结构
