@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # =============================================================================
 # zen2api Termux 一键安装脚本
-# 用法: curl -sL https://raw.githubusercontent.com/ymymssss/zen2api-re/master/setup.sh | bash
+# 用法: curl -sL https://raw.githubusercontent.com/ymymssss/zen2api-re/main/setup.sh | bash
 # 或者: bash setup.sh
 # =============================================================================
 set -euo pipefail
@@ -96,7 +96,7 @@ INSTALL_DIR="$TERMUX_HOME/zen2api"
 if [[ -d "$INSTALL_DIR/.git" ]]; then
     info "仓库已存在，拉取最新代码..."
     cd "$INSTALL_DIR"
-    git pull --ff-only origin master 2>/dev/null || {
+    git pull --ff-only origin main 2>/dev/null || {
         warn "拉取失败，将使用现有代码继续"
     }
 else
@@ -117,7 +117,7 @@ fi
 step "编译 zen2api"
 
 # 清理之前的构建产物
-rm -f zen2api zen2api-re
+rm -rf zen2api zen2api-re
 
 # 静态编译 — 无任何外部依赖，生成的二进制可在任何同架构 Linux 上运行
 detail "开始编译 (GOOS=linux GOARCH=$GOARCH CGO_ENABLED=0)..."
