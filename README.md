@@ -72,9 +72,112 @@ custom_providers:
 ZENLOCAL_API_KEY="test" hermes -m "minimax-m2.5-free" --provider zenlocal
 ```
 
-## 管理面板
+## AI Agent 接入注意事项（重要）
 
-启动后访问 `http://127.0.0.1:9015/admin`
+以下事项 AI agent 容易出错，接入时请逐一检查。
+
+### 1. `ZEN2API_ENABLED` 必须设为 `1`
+
+值必须是字符串 `"1"`，不是 `"true"` 或 `"True"` 或 `"yes"`。虽然 `ZEN2API_ENABLED=true` 也能被 envBool 识别，但建议统一用 `1`。
+
+```bash
+# 正确
+ZEN2API_ENABLED=1 ./zen2api
+
+# 错误 — 服务不会启动
+ZEN2API_ENABLED=false ./zen2api
+```
+
+如果未设置 `ZEN2API_ENABLED=1` 且也未开启 AnyRouter，进程会直接 Fatal 退出。
+
+### 2. Hermes transport 类型必须是 `anthropic_messages`
+
+即使调用 `/v1/chat/completions`（OpenAI 格式端点），Hermes 的 transport 也必须配置为 `anthropic_messages`。这是 Hermes 内部的概念——它决定了 Hermes 如何构造请求体，与 zen2api 的端点选择无关。
+
+```yaml
+# 正确
+transport: anthropic_messages
+
+# 错误 — AI agent 容易猜这个值
+transport: openai_chat_completions
+```
+
+### 3. `key_env` 是环境变量名，不是密钥值
+
+Hermes 配置中的 `key_env` 指向一个**环境变量的名字**，而不是 API key 本身。
+
+```yaml
+# 正确 — ZENLOCAL_API_KEY 是环境变量名，运行时从环境读取
+key_env: ZENLOCAL_API_KEY
+
+# 错误 — 不要把 key 值直接写在这里
+key_env: sk-xxxx
+```
+
+如果 zen2api 未设置 `ZEN2API_KEY`（默认不校验），则 Hermes 传入任意值即可：`ZENLOCAL_API_KEY="any"`。
+
+### 4. 模型名必须与 `/v1/models` 返回的一致
+
+可用的模型 ID 由 zen2api 动态发现并合并 Zen 和 Kilo 上游后决定。启动后查看：
+
+```bash
+curl -s http://127.0.0.1:9015/v1/models | jq '.data[].id'
+```
+
+常见的模型 ID 示例：
+- `minimax-m2.5-free`（Zen，Anthropic 原生协议）
+- `kilo-auto/free`（Kilo，免费模型轮转，Anthropic→OpenAI 转换）
+- `nvidia/nemotron-3-super-120b-a12b:free`（Kilo）
+
+模型路由是自动的：Kilo 模型走 Anthropic→OpenAI 转换，其余走 Zen 直通。
+
+### 5. Anthropic Messages 端点需要 `max_tokens`
+
+请求 `/v1/messages`（Anthropic 格式）时，`max_tokens` 是必填字段。zen2api 会自动补默认值 8192，但不建议依赖。如果上游返回校验错误，检查是否缺了这个字段。
+
+### 6. 端口默认 9015，不是 8080
+
+```bash
+# 正确
+base_url: http://127.0.0.1:9015
+
+# 错误 — agent 常猜 8080、3000、11434 等
+base_url: http://127.0.0.1:8080
+```
+
+### 7. 启动即运行，无配置文件
+
+zen2api 是零配置启动的，所有配置通过环境变量传入，没有 `.env` 文件、`config.yaml` 或 `config.json`。AI agent 不应尝试寻找或创建配置文件。
+
+### 8. 不要尝试 `pip install` 或 `npm install`
+
+zen2api 是 Go 编译的单一二进制文件，不是 Python 或 Node 项目。Agent 不应执行 `pip install -r requirements.txt` 或 `npm install`。
+
+### 9. 流式响应默认支持
+
+所有端点均支持 `stream: true`。非流式请求也正常运作。Agent 不应假设只支持其中一种模式。
+
+### 10. 速率限制默认 10 RPS
+
+每个 API key 每秒 10 个请求。Agent 并发调用时注意不要超过此限制，否则返回 429。
+
+### 11. AnyRouter 是独立服务
+
+AnyRouter 需要单独开启（`ZEN2API_ANYROUTER_ENABLED=1`），监听独立端口（默认 18888）。不开启则只有主代理服务。
+
+### 12. API Key 认证
+
+- 如果 `ZEN2API_KEY` 为空（默认），不校验任何认证，所有请求放行
+- 如果设置了 `ZEN2API_KEY`，客户端必须通过 `x-api-key` header 或 `Authorization: Bearer <key>` 传入匹配的 key
+- Hermes 通过 `key_env` 指定的环境变量自动添加 `x-api-key` header
+
+### 13. 不要假设上游 URL 可直连
+
+zen2api 是一个代理，上游 URL（`ZEN_UPSTREAM_URL`、`KILO_UPSTREAM_URL`）由服务端配置。客户端只需连接 zen2api 的地址即可。
+
+### 14. 管理面板路径是 `/admin`
+
+启动后访问 `http://127.0.0.1:9015/admin`，可以查看仪表盘、模型列表、系统配置、速率限制等。不是 `/`、`/ui`、`/dashboard`。
 
 ## License
 
