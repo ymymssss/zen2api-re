@@ -1,0 +1,4 @@
+/zen2api
+stats.json
+*.log
+.DS_Store
