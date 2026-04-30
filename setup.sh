@@ -350,8 +350,9 @@ if [[ ! -f "$HERMES_CONFIG_DIR/config.yaml" ]]; then
 model: "minimax-m2.5-free"
 provider: zenlocal
 
-custom_providers:
-  - name: zenlocal
+providers:
+  zenlocal:
+    name: ZenLocal
     base_url: http://127.0.0.1:9015
     transport: anthropic_messages
     key_env: ZENLOCAL_API_KEY

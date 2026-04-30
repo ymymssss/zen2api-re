@@ -69,8 +69,9 @@ ZEN2API_ENABLED=1 ZEN2API_PORT=9015 ./zen2api
 model: "minimax-m2.5-free"
 provider: zenlocal
 
-custom_providers:
-  - name: zenlocal
+providers:
+  zenlocal:
+    name: ZenLocal
     base_url: http://127.0.0.1:9015
     transport: anthropic_messages
     key_env: ZENLOCAL_API_KEY
