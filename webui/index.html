@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>zen2api Admin</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text2: #8b949e;
+  --green: #3fb950;
+  --blue: #58a6ff;
+  --yellow: #d2991d;
+  --red: #f85149;
+  --purple: #a371f7;
+  --orange: #db6d28;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+body.nav-open { overflow:hidden; }
+
+/* Sidebar */
+.sidebar { position:fixed; left:0; top:0; width:240px; height:100vh; background:var(--bg2); border-right:1px solid var(--border); z-index:100; display:flex; flex-direction:column; transform:translateX(-100%); transition:transform .25s; }
+.sidebar.open { transform:translateX(0); }
+.sidebar-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:99; display:none; }
+.sidebar-overlay.open { display:block; }
+.sidebar-brand { padding:20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.sidebar-brand svg { width:28px; height:28px; }
+.sidebar-brand h1 { font-size:18px; font-weight:600; }
+.sidebar-nav { flex:1; padding:12px 0; overflow-y:auto; }
+.sidebar-nav a { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text2); text-decoration:none; font-size:14px; transition:all .15s; border-left:3px solid transparent; }
+.sidebar-nav a:hover { color:var(--text); background:var(--bg3); }
+.sidebar-nav a.active { color:var(--blue); background:rgba(88,166,255,.1); border-left-color:var(--blue); }
+.sidebar-nav a svg { width:18px; height:18px; flex-shrink:0; }
+.sidebar-footer { padding:12px 20px; border-top:1px solid var(--border); font-size:12px; color:var(--text2); }
+
+/* Main */
+.main { min-height:100vh; }
+.main-header { position:sticky; top:0; z-index:50; background:var(--bg); border-bottom:1px solid var(--border); padding:14px 20px; display:flex; align-items:center; gap:12px; }
+.menu-btn { background:none; border:none; color:var(--text); cursor:pointer; padding:4px; border-radius:6px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; }
+.menu-btn:hover { background:var(--bg3); }
+.main-header h2 { font-size:16px; font-weight:500; }
+.page { padding:24px; max-width:1400px; display:none; }
+.page.active { display:block; }
+
+/* Cards */
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:24px; }
+.card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:20px; }
+.card-title { font-size:12px; color:var(--text2); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.card-value { font-size:28px; font-weight:600; }
+.card-value.green { color:var(--green); }
+.card-value.blue { color:var(--blue); }
+.card-value.yellow { color:var(--yellow); }
+.card-value.purple { color:var(--purple); }
+
+.panel { background:var(--bg2); border:1px solid var(--border); border-radius:8px; margin-bottom:16px; }
+.panel-header { padding:14px 20px; border-bottom:1px solid var(--border); font-weight:500; font-size:14px; display:flex; align-items:center; justify-content:space-between; }
+.panel-body { padding:20px; overflow-x:auto; }
+
+/* Tables */
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; padding:10px 14px; color:var(--text2); font-weight:500; border-bottom:1px solid var(--border); white-space:nowrap; }
+td { padding:10px 14px; border-bottom:1px solid var(--border); }
+tr:hover td { background:rgba(255,255,255,.02); }
+
+/* Buttons */
+.btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:6px; border:1px solid var(--border); background:var(--bg3); color:var(--text); font-size:13px; cursor:pointer; font-family:inherit; transition:all .15s; white-space:nowrap; }
+.btn:hover { background:var(--border); }
+.btn-accent { background:var(--blue); border-color:var(--blue); color:#fff; }
+.btn-accent:hover { opacity:.85; }
+.btn-danger { background:var(--red); border-color:var(--red); color:#fff; }
+.btn-danger:hover { opacity:.85; }
+.btn-sm { padding:4px 10px; font-size:12px; }
+
+/* Forms */
+.form-group { margin-bottom:16px; }
+.form-label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
+.form-input { width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13px; font-family:inherit; }
+.form-input:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 2px rgba(88,166,255,.15); }
+.form-row { display:flex; gap:12px; }
+.form-row > * { flex:1; }
+
+/* Status badges */
+.badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+.badge-green { background:rgba(63,185,80,.15); color:var(--green); }
+.badge-red { background:rgba(248,81,73,.15); color:var(--red); }
+.badge-blue { background:rgba(88,166,255,.15); color:var(--blue); }
+
+/* Modal */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:200; display:flex; align-items:center; justify-content:center; display:none; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--bg2); border:1px solid var(--border); border-radius:12px; width:90%; max-width:800px; max-height:80vh; overflow-y:auto; }
+.modal-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.modal-header h3 { font-size:15px; }
+.modal-close { background:none; border:none; color:var(--text); cursor:pointer; font-size:20px; padding:4px 8px; }
+.modal-body { padding:20px; }
+.modal-body pre { white-space:pre-wrap; word-break:break-all; font-size:12px; max-height:55vh; overflow-y:auto; background:var(--bg); padding:16px; border-radius:8px; }
+
+/* Toast */
+.toast-container { position:fixed; top:16px; right:16px; z-index:300; }
+.toast { padding:12px 20px; border-radius:8px; margin-bottom:8px; font-size:13px; animation:slideIn .2s; max-width:380px; }
+.toast-success { background:#1a3d2b; border:1px solid var(--green); color:var(--green); }
+.toast-error { background:#3d1a1a; border:1px solid var(--red); color:var(--red); }
+@keyframes slideIn { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+
+/* Code / JSON viewer */
+.json-key { color:var(--blue); }
+.json-str { color:var(--green); }
+.json-num { color:var(--orange); }
+
+/* Responsive */
+@media (min-width:768px) {
+  .sidebar { transform:translateX(0); }
+  .main { margin-left:240px; }
+  .menu-btn { display:none; }
+  .sidebar-overlay { display:none !important; }
+}
+
+/* Spinner */
+.spinner { width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin .6s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Log viewer */
+.log-entry { padding:6px 0; border-bottom:1px solid rgba(255,255,255,.03); font-size:12px; font-family:monospace; }
+.log-level { font-weight:600; }
+.log-level.INFO { color:var(--blue); }
+.log-level.WARNING { color:var(--yellow); }
+.log-level.ERROR { color:var(--red); }
+.log-level.DEBUG { color:var(--text2); }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    <h1>zen2api</h1>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="#dashboard" class="active" data-page="dashboard" onclick="showPage('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      仪表盘
+    </a>
+    <a href="#models" data-page="models" onclick="showPage('models')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      模型管理
+    </a>
+    <a href="#config" data-page="config" onclick="showPage('config')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      系统配置
+    </a>
+    <a href="#ratelimit" data-page="ratelimit" onclick="showPage('ratelimit')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      速率限制
+    </a>
+    <a href="#captures" data-page="captures" onclick="showPage('captures')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      捕获记录
+    </a>
+    <a href="#system" data-page="system" onclick="showPage('system')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+      系统信息
+    </a>
+  </nav>
+  <div class="sidebar-footer">v1.0.0 · MIT</div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <header class="main-header">
+    <button class="menu-btn" onclick="toggleSidebar()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <h2 id="pageTitle">仪表盘</h2>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:8px;" id="statusDot"></span>
+  </header>
+
+  <!-- Dashboard -->
+  <div class="page active" id="page-dashboard">
+    <div class="grid" id="statsGrid"></div>
+    <div class="panel">
+      <div class="panel-header">API Key 用量</div>
+      <div class="panel-body"><div id="usageTable"><p style="color:var(--text2)">加载中…</p></div></div>
+    </div>
+  </div>
+
+  <!-- Models -->
+  <div class="page" id="page-models">
+    <div style="margin-bottom:16px;display:flex;gap:8px;">
+      <button class="btn btn-accent" onclick="refreshModels()">
+        <span class="spinner" id="modelRefreshSpinner" style="display:none"></span> 刷新模型
+      </button>
+    </div>
+    <div id="modelsContent"></div>
+  </div>
+
+  <!-- Config -->
+  <div class="page" id="page-config">
+    <div class="panel">
+      <div class="panel-header">环境配置 <button class="btn btn-sm" onclick="loadConfig()">刷新</button></div>
+      <div class="panel-body"><div id="configTable"></div></div>
+    </div>
+  </div>
+
+  <!-- Rate Limits -->
+  <div class="page" id="page-ratelimit">
+    <div class="panel">
+      <div class="panel-header">速率限制设置</div>
+      <div class="panel-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">全局限速 (RPS)</label>
+            <input class="form-input" id="rateLimitRPS" type="number" min="0.1" step="0.5" placeholder="2">
+          </div>
+          <div class="form-group">
+            <label class="form-label">突发容量</label>
+            <input class="form-input" id="rateLimitBurst" type="number" min="1" step="1" placeholder="2">
+          </div>
+        </div>
+        <button class="btn btn-accent" onclick="updateRateLimits()">应用</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">活跃令牌桶</div>
+      <div class="panel-body"><div id="rateLimitBuckets"></div></div>
+    </div>
+  </div>
+
+  <!-- Captures -->
+  <div class="page" id="page-captures">
+    <div style="margin-bottom:16px;display:flex;gap:8px;">
+      <button class="btn btn-accent" onclick="loadCaptures()">刷新</button>
+      <button class="btn btn-danger" onclick="clearCaptures()">清空全部</button>
+    </div>
+    <div id="capturesContent"><p style="color:var(--text2)">加载中…</p></div>
+  </div>
+
+  <!-- System -->
+  <div class="page" id="page-system">
+    <div id="systemContent"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">详情</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ── State ──
+let currentPage = 'dashboard';
+let refreshTimer = null;
+
+// ── Navigation ──
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.querySelector('.sidebar-overlay').classList.toggle('open');
+  document.body.classList.toggle('nav-open');
+}
+
+function showPage(name) {
+  currentPage = name;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector(`[data-page="${name}"]`).classList.add('active');
+  document.getElementById('pageTitle').textContent = document.querySelector(`[data-page="${name}"]`).textContent.trim();
+
+  // Close sidebar on mobile
+  if (window.innerWidth < 768) {
+    document.getElementById('sidebar').classList.remove('open');
+    document.querySelector('.sidebar-overlay').classList.remove('open');
+    document.body.classList.remove('nav-open');
+  }
+
+  loadPage(name);
+}
+
+function loadPage(name) {
+  switch(name) {
+    case 'dashboard': loadDashboard(); break;
+    case 'models': loadModels(); break;
+    case 'config': loadConfig(); break;
+    case 'ratelimit': loadRateLimits(); break;
+    case 'captures': loadCaptures(); break;
+    case 'system': loadSystem(); break;
+  }
+}
+
+// ── API helpers ──
+async function api(path, opts = {}) {
+  const url = '/admin/api' + path;
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function formatNum(n) { return n?.toLocaleString() ?? '0'; }
+function formatDur(s) {
+  if (!s) return '0s';
+  const m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  return (d?d+'d ':'') + (h%24?h%24+'h ':'') + (m%60?m%60+'m ':'') + (Math.floor(s)%60)+'s';
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  try {
+    const data = await api('/stats');
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="card">
+        <div class="card-title">运行时间</div>
+        <div class="card-value green">${data.uptime_display}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">总请求数</div>
+        <div class="card-value blue">${formatNum(data.total_requests)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">总输入 Tokens</div>
+        <div class="card-value">${formatNum(data.total_input_tokens)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">总输出 Tokens</div>
+        <div class="card-value purple">${formatNum(data.total_output_tokens)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">总 Tokens</div>
+        <div class="card-value yellow">${formatNum(data.total_tokens)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">活跃 Key 数</div>
+        <div class="card-value">${data.active_keys}</div>
+      </div>
+    `;
+
+    const usage = data.usage_by_key || {};
+    let rows = Object.entries(usage)
+      .map(([k, v]) => `<tr>
+        <td><code>${k.substring(0, 16)}${k.length > 16 ? '…' : ''}</code></td>
+        <td>${formatNum(v.request_count)}</td>
+        <td>${formatNum(v.input_tokens)}</td>
+        <td>${formatNum(v.output_tokens)}</td>
+        <td>${formatNum(v.total_tokens)}</td>
+        <td>${new Date(v.last_access * 1000).toLocaleString()}</td>
+      </tr>`).join('');
+    if (!rows) rows = '<tr><td colspan="6" style="color:var(--text2)">暂无数据</td></tr>';
+    document.getElementById('usageTable').innerHTML = `<table>
+      <thead><tr><th>API Key</th><th>请求数</th><th>输入 Tokens</th><th>输出 Tokens</th><th>总计 Tokens</th><th>最近访问</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+
+    // Status dot
+    document.getElementById('statusDot').innerHTML = '<span class="badge badge-green">● 运行中</span>';
+  } catch (e) {
+    document.getElementById('statusDot').innerHTML = '<span class="badge badge-red">● 离线</span>';
+    console.error(e);
+  }
+}
+
+// ── Models ──
+async function loadModels() {
+  try {
+    const data = await api('/models');
+    let html = '';
+    for (const [src, info] of Object.entries(data)) {
+      const ttl = info.cache_ttl_remaining ? `缓存剩余: ${Math.round(info.cache_ttl_remaining)}s` : '已过期';
+      html += `<div class="panel">
+        <div class="panel-header">${src.toUpperCase()} · ${info.count} 个模型 <span class="badge badge-blue">${ttl}</span></div>
+        <div class="panel-body"><table><thead><tr><th>ID</th></tr></thead><tbody>`;
+      for (const m of (info.models || []).slice(0, 30)) {
+        html += `<tr><td><code>${m.id || m}</code></td></tr>`;
+      }
+      html += '</tbody></table></div></div>';
+    }
+    document.getElementById('modelsContent').innerHTML = html || '<p style="color:var(--text2)">暂无模型数据</p>';
+  } catch (e) { toast('加载模型失败: ' + e.message, 'error'); }
+}
+
+async function refreshModels() {
+  const sp = document.getElementById('modelRefreshSpinner');
+  sp.style.display = 'inline-block';
+  try {
+    const data = await api('/models/refresh', { method: 'POST' });
+    let msgs = [];
+    for (const [s, r] of Object.entries(data.results)) msgs.push(`${s}: ${r.status}`);
+    toast('刷新完成: ' + msgs.join(', '));
+    loadModels();
+  } catch (e) { toast('刷新失败', 'error'); }
+  finally { sp.style.display = 'none'; }
+}
+
+// ── Config ──
+async function loadConfig() {
+  try {
+    const data = await api('/config');
+    let rows = Object.entries(data.config)
+      .map(([k, v]) => `<tr>
+        <td style="font-weight:500;white-space:nowrap">${k}</td>
+        <td style="font-family:monospace;word-break:break-all">${v === '' ? '<span style="color:var(--text2)">(空)</span>' : v}</td>
+      </tr>`).join('');
+    document.getElementById('configTable').innerHTML = `<table>
+      <thead><tr><th>配置项</th><th>值</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (e) { toast('加载配置失败', 'error'); }
+}
+
+// ── Rate Limits ──
+async function loadRateLimits() {
+  try {
+    const data = await api('/rate-limits');
+    document.getElementById('rateLimitRPS').value = data.default_rate;
+    document.getElementById('rateLimitBurst').value = data.default_burst;
+
+    let rows = Object.entries(data.buckets || {})
+      .map(([k, v]) => `<tr><td><code>${k.substring(0,20)}</code></td><td>${v.tokens}</td><td>${v.rate}</td><td>${v.burst}</td></tr>`).join('');
+    if (!rows) rows = '<tr><td colspan="4" style="color:var(--text2)">暂无活跃限流</td></tr>';
+    document.getElementById('rateLimitBuckets').innerHTML = `<table>
+      <thead><tr><th>Key</th><th>当前令牌</th><th>速率</th><th>突发</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (e) { toast('加载失败', 'error'); }
+}
+
+async function updateRateLimits() {
+  const rate = parseFloat(document.getElementById('rateLimitRPS').value) || 0;
+  const burst = parseInt(document.getElementById('rateLimitBurst').value) || 0;
+  const params = new URLSearchParams();
+  if (rate > 0) params.set('rate', rate);
+  if (burst > 0) params.set('burst', burst);
+  try {
+    await api('/rate-limits?' + params, { method: 'POST' });
+    toast('速率限制已更新');
+    loadRateLimits();
+  } catch (e) { toast('更新失败', 'error'); }
+}
+
+// ── Captures ──
+async function loadCaptures() {
+  try {
+    const data = await api('/captures?limit=100');
+    if (!data.captures || data.captures.length === 0) {
+      document.getElementById('capturesContent').innerHTML = '<p style="color:var(--text2)">暂无捕获记录。请启用 AnyRouter 捕获。</p>';
+      return;
+    }
+    let rows = data.captures.map(c => `<tr>
+      <td>${c._filename}</td>
+      <td>${new Date(c.timestamp / 1000).toLocaleString()}</td>
+      <td><span class="badge badge-blue">${c.method}</span></td>
+      <td><code>${c.path?.substring(0, 50)}</code></td>
+      <td>${c.response_status}</td>
+      <td>
+        <button class="btn btn-sm" onclick="viewCapture('${c._filename}')">查看</button>
+        <button class="btn btn-sm" onclick="deleteCapture('${c._filename}')">删除</button>
+      </td></tr>`).join('');
+    document.getElementById('capturesContent').innerHTML = `<table>
+      <thead><tr><th>文件</th><th>时间</th><th>方法</th><th>路径</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  } catch (e) { toast('加载捕获失败', 'error'); }
+}
+
+async function viewCapture(filename) {
+  try {
+    const data = await api('/captures/' + filename);
+    document.getElementById('modalTitle').textContent = filename;
+    document.getElementById('modalBody').innerHTML = `<pre>${formatJSON(data)}</pre>`;
+    document.getElementById('modal').classList.add('open');
+  } catch (e) { toast('加载失败', 'error'); }
+}
+
+async function deleteCapture(filename) {
+  if (!confirm('删除 ' + filename + '?')) return;
+  try {
+    await api('/captures/' + filename, { method: 'DELETE' });
+    toast('已删除');
+    loadCaptures();
+  } catch (e) { toast('删除失败', 'error'); }
+}
+
+async function clearCaptures() {
+  if (!confirm('确认清空所有捕获记录?')) return;
+  try {
+    const data = await api('/captures', { method: 'DELETE' });
+    toast('已清空 ' + data.deleted + ' 条记录');
+    loadCaptures();
+  } catch (e) { toast('清空失败', 'error'); }
+}
+
+// ── System ──
+async function loadSystem() {
+  try {
+    const data = await api('/system');
+    document.getElementById('systemContent').innerHTML = `
+      <div class="panel">
+        <div class="panel-header">系统信息</div>
+        <div class="panel-body">
+          <table>
+            <tr><td style="font-weight:500">版本</td><td>${data.version}</td></tr>
+            <tr><td style="font-weight:500">Python</td><td>${data.python}</td></tr>
+            <tr><td style="font-weight:500">平台</td><td>${data.platform}</td></tr>
+            <tr><td style="font-weight:500">进程 ID</td><td>${data.pid}</td></tr>
+          </table>
+        </div>
+      </div>`;
+  } catch (e) { toast('加载失败', 'error'); }
+}
+
+// ── Modal ──
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ── JSON formatter ──
+function formatJSON(obj) {
+  const json = JSON.stringify(obj, null, 2);
+  return json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+    .replace(/: "([^"]*)"/g, ': <span class="json-str">"$1"</span>')
+    .replace(/: (\d+[.\d]*)/g, ': <span class="json-num">$1</span>');
+}
+
+// ── Init ──
+loadDashboard();
+setInterval(() => { if (currentPage === 'dashboard') loadDashboard(); }, 10000);
+</script>
+</body>
+</html>
