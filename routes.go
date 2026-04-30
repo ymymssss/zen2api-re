@@ -30,6 +30,8 @@ func newMux() http.Handler {
 	mux.HandleFunc("/admin/api/models", handleAdminModels)
 	mux.HandleFunc("/admin/api/models/refresh", handleAdminModelsRefresh)
 	mux.HandleFunc("/admin/api/system", handleAdminSystem)
+	mux.HandleFunc("/admin/api/captures", handleAdminCaptures)
+	mux.HandleFunc("/admin/api/captures/", handleAdminCaptureDetail)
 
 	// Admin SPA
 	mux.HandleFunc("/admin", handleAdminUI)

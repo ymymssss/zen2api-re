@@ -2,9 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -83,14 +87,25 @@ func handleAdminRateLimits(w http.ResponseWriter, r *http.Request) {
 
 func handleAdminModels(w http.ResponseWriter, r *http.Request) {
 	zen, kilo := DiscoverModels(cfg)
+
+	modelLock.RLock()
+	zenExpiry := modelCacheExpiry["zen"]
+	kiloExpiry := modelCacheExpiry["kilo"]
+	modelLock.RUnlock()
+
+	zenTTL := time.Until(zenExpiry).Seconds()
+	kiloTTL := time.Until(kiloExpiry).Seconds()
+
 	writeJSON(w, 200, map[string]any{
 		"zen": map[string]any{
-			"count":  len(zen),
-			"models": zen,
+			"count":               len(zen),
+			"models":              zen,
+			"cache_ttl_remaining": max(0, zenTTL),
 		},
 		"kilo": map[string]any{
-			"count":  len(kilo),
-			"models": kilo,
+			"count":               len(kilo),
+			"models":              kilo,
+			"cache_ttl_remaining": max(0, kiloTTL),
 		},
 	})
 }
@@ -121,6 +136,138 @@ func handleAdminSystem(w http.ResponseWriter, r *http.Request) {
 		"platform": runtime.GOOS + "/" + runtime.GOARCH,
 		"pid":      os.Getpid(),
 	})
+}
+
+// ── Captures ────────────────────────────────────────────────────────
+
+func handleAdminCaptures(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		limit := 100
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if n, err := parseInt(l); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		captures := listCaptureFiles(limit)
+		writeJSON(w, 200, map[string]any{"captures": captures})
+
+	case "DELETE":
+		n := deleteAllCaptures()
+		writeJSON(w, 200, map[string]any{"deleted": n})
+
+	default:
+		writeJSON(w, 405, map[string]any{"error": "method not allowed"})
+	}
+}
+
+func handleAdminCaptureDetail(w http.ResponseWriter, r *http.Request) {
+	// Extract filename from path: /admin/api/captures/<filename>
+	filename := strings.TrimPrefix(r.URL.Path, "/admin/api/captures/")
+	if filename == "" {
+		writeJSON(w, 400, map[string]any{"error": "missing filename"})
+		return
+	}
+
+	switch r.Method {
+	case "GET":
+		data, err := os.ReadFile(filepath.Join(cfg.AnyRouterCaptureDir, filename))
+		if err != nil {
+			writeJSON(w, 404, map[string]any{"error": "capture not found"})
+			return
+		}
+		var obj map[string]any
+		json.Unmarshal(data, &obj)
+		if obj == nil {
+			obj = map[string]any{"raw": string(data)}
+		}
+		writeJSON(w, 200, obj)
+
+	case "DELETE":
+		if err := os.Remove(filepath.Join(cfg.AnyRouterCaptureDir, filename)); err != nil {
+			writeJSON(w, 404, map[string]any{"error": "capture not found"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"status": "ok"})
+
+	default:
+		writeJSON(w, 405, map[string]any{"error": "method not allowed"})
+	}
+}
+
+func listCaptureFiles(limit int) []map[string]any {
+	dir := cfg.AnyRouterCaptureDir
+	entries, err := fs.ReadDir(os.DirFS(dir), ".")
+	if err != nil {
+		return nil
+	}
+
+	type capEntry struct {
+		name    string
+		modTime time.Time
+	}
+
+	var caps []capEntry
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "capture_") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		caps = append(caps, capEntry{name: e.Name(), modTime: info.ModTime()})
+	}
+
+	// Sort newest first
+	sort.Slice(caps, func(i, j int) bool {
+		return caps[i].modTime.After(caps[j].modTime)
+	})
+
+	if limit > len(caps) {
+		limit = len(caps)
+	}
+
+	var result []map[string]any
+	for i := 0; i < limit; i++ {
+		entry := caps[i]
+		item := map[string]any{
+			"_filename": entry.name,
+			"timestamp": entry.modTime.UnixMicro(),
+		}
+
+		// Read file to extract method, path, status
+		data, err := os.ReadFile(filepath.Join(dir, entry.name))
+		if err == nil {
+			var obj map[string]any
+			if json.Unmarshal(data, &obj) == nil {
+				item["method"] = obj["method"]
+				item["path"] = obj["path"]
+				if s, ok := obj["status"].(float64); ok {
+					item["response_status"] = int(s)
+				}
+			}
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func deleteAllCaptures() int {
+	dir := cfg.AnyRouterCaptureDir
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), "capture_") {
+			if os.Remove(filepath.Join(dir, e.Name())) == nil {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // ── Admin SPA ──────────────────────────────────────────────────────
