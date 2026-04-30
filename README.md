@@ -16,7 +16,17 @@
 
 ## 快速开始
 
-### 编译
+### Termux 一键安装（推荐）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ymymssss/zen2api-re/master/setup.sh | bash
+```
+
+脚本自动完成：环境检测 → 安装依赖 → 源码编译 → 安装到 PATH → 创建 `zen` 命令 → 写入环境变量 → 生成 Hermes 配置。
+
+装完后直接 `zen` 启动，`zen status` 看状态，`zen stop` 停止。
+
+### 手动编译
 
 ```bash
 go build -o zen2api .
