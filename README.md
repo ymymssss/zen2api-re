@@ -1,229 +1,184 @@
-# API 代理服务 - 跨平台版
-
-将原本的ai 工具逆向为可在 **Linux / Ubuntu / Termux** 上运行的 Python 应用。
-
-## 项目说明
-
-本项目包含两个 API 代理服务和一个 Web 管理面板：
-
-| 服务 | 说明 | 默认端口 |
-|------|------|---------|
-| **zen2api** | OpenAI / Anthropic / Kilo 多模型代理 | 9016 |
-| **grok2api** | Grok API 代理 | 8021 |
-| **Web UI** | 中文管理控制面板 | 8081 |
-
-## 环境要求
-
-- Python 3.10+
-- pip
-
-## 快速安装
-
-### 1. 克隆仓库
-
-```bash
-git clone https://github.com/ymymssss/zen2api-re.git
-cd zen2api-re
-```
-
-### 2. 安装依赖
-
-```bash
-# zen2api 依赖
-pip install -r zen2api/requirements.txt
-
-# grok2api 依赖
-pip install -r grok2api/requirements.txt
-```
-
-> **Termux 用户**：如遇到编译错误，先执行：
-> ```bash
-> pkg install python build-essential
-> ```
-
-### 3. 配置环境变量（可选）
-
-```bash
-# 复制配置模板
-cp zen2api/.env.template zen2api/.env
-cp grok2api/.env.template grok2api/.env
-
-# 编辑配置
-nano zen2api/.env
-nano grok2api/.env
-```
-
-### 4. 启动服务
-
-```bash
-# 启动 zen2api
-cd zen2api && ./start.sh &
-
-# 启动 grok2api
-cd grok2api && ./start.sh &
-
-# 启动 Web 管理面板(暂时不完善）
-cd webui && python3 -m http.server 8081 &
-```
-
-或手动指定端口：
-
-```bash
 # zen2api
-cd zen2api && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9016
 
-# grok2api
-cd grok2api && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8021
-```
+多模型 API 代理服务，支持 Anthropic Messages 与 OpenAI Chat Completions 格式互转。
 
-## 访问服务
+使用 Go 编写，单一二进制文件，零依赖运行。
 
-启动后访问：
+## 支持的协议
 
-| 服务 | 地址 |
-|------|------|
-| Web 管理面板 | http://127.0.0.1:8081 |
-| zen2api API | http://127.0.0.1:9016 |
-| grok2api API | http://127.0.0.1:8021 |
+| 端点 | 格式 | 上游 |
+|------|------|------|
+| `/v1/messages` | Anthropic Messages | Zen (passthrough) / Kilo (Anthropic→OpenAI 转换) |
+| `/v1/chat/completions` | OpenAI Chat Completions | Zen (OpenAI→Anthropic 转换) |
+| `/v1/responses` | OpenAI Responses | Zen (Responses→Anthropic 转换) |
+| `/v1/models` | 模型列表 | 动态发现 + 静态配置 |
+| `/admin` | Web 管理面板 | 内嵌 |
 
-## API 使用
+## 快速开始
 
-### zen2api
-
-```bash
-# 健康检查
-curl http://127.0.0.1:9016/health
-
-# 查看可用模型
-curl http://127.0.0.1:9016/v1/models
-
-# 发送聊天请求
-curl http://127.0.0.1:9016/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"minimax-m2.5-free","messages":[{"role":"user","content":"你好"}]}'
-
-# 查看统计
-curl http://127.0.0.1:9016/stats
-```
-
-### grok2api
+### 编译
 
 ```bash
-# 健康检查
-curl http://127.0.0.1:8021/health
-
-# 查看模型
-curl http://127.0.0.1:8021/v1/models
+go build -o zen2api .
 ```
 
-## 配置说明
-
-### zen2api 环境变量
-
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `ZEN2API_HOST` | 127.0.0.1 | 监听地址 |
-| `ZEN2API_PORT` | 9016 | 监听端口 |
-| `ZEN2API_KEY` | (空) | API Key（留空则不验证） |
-| `ZEN2API_LOG_LEVEL` | INFO | 日志级别 |
-| `ZEN2API_MODEL_DISCOVERY_ENABLED` | true | 自动发现模型 |
-
-### grok2api 环境变量
-
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `ZEN2API_GROK2API_HOST` | 127.0.0.1 | 监听地址 |
-| `ZEN2API_GROK2API_PORT` | 8021 | 监听端口 |
-
-## Web 管理面板
-
-打开 http://127.0.0.1:8081 即可使用中文管理面板：
-
-- **服务控制**：查看 zen2api / grok2api 运行状态
-- **统计仪表盘**：总请求数、今日请求、Token 用量、缓存命中率（不完善）
-- **数据图表**：请求趋势、Token 趋势、状态码分布、Token 结构（不完善）
-- **配置管理**：在线修改 Host / Port / API Key
-
-## 目录结构
-
-```
-.
-├── zen2api/                    # zen2api 代理服务
-│   ├── app/                    # 源码（21 个模块）
-│   │   ├── main.py             # FastAPI 入口
-│   │   ├── config.py           # 配置管理
-│   │   ├── license_guard.py    # 已禁用
-│   │   ├── openai_zen_proxy.py # OpenAI 代理
-│   │   ├── anthropic_proxy.py  # Anthropic 代理
-│   │   ├── kilo_proxy.py       # Kilo 代理
-│   │   └── ...
-│   ├── requirements.txt
-│   ├── .env.template
-│   └── start.sh
-├── grok2api/                   # grok2api 代理服务
-│   ├── app/                    # 源码（35 个模块）
-│   │   ├── main.py
-│   │   ├── core/               # 核心模块
-│   │   ├── api/                # API 路由
-│   │   ├── services/           # 业务逻辑
-│   │   └── models/             # 数据模型
-│   ├── requirements.txt
-│   ├── .env.template
-│   └── start.sh
-├── webui/                      # Web 管理面板
-│   └── index.html              # 单文件，无依赖
-├── .gitignore
-└── README.md
-```
-
-## 技术栈
-
-- **框架**: FastAPI + Uvicorn
-- **HTTP 客户端**: httpx (zen2api) / aiohttp (grok2api)
-- **前端**: 纯 HTML/CSS/JS（无外部依赖）
-- **Python 版本**: 3.10+（兼容 3.12）
-
-## 逆向说明
-
-本项目通过以下方式从原始 Windows EXE 重建：
-
-1. 使用 `pyinstxtractor` 提取 PyInstaller 打包的 Python 字节码
-2. 使用 `strings` 分析提取模块结构和函数签名
-3. 手动重建 Python 源码（功能等效，非字节级一致）
-4. 移除卡密验证和 AnyRouter 功能
-5. 适配 Linux / Termux 环境
-
-## 常见问题
-
-### Q: 端口被占用怎么办？
-
-修改 `.env` 文件中的端口号，或启动时指定：
+### 运行
 
 ```bash
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9999
+ZEN2API_ENABLED=1 ZEN2API_PORT=9015 ./zen2api
 ```
 
-### Q: Termux 上安装依赖失败？
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `ZEN2API_HOST` | `127.0.0.1` | 监听地址 |
+| `ZEN2API_PORT` | `9015` | 监听端口 |
+| `ZEN2API_KEY` | 空 | API 密钥（不设则不校验） |
+| `ZEN2API_NON_MODAL_RPS` | `10` | 每 key 每秒请求数 |
+| `ZEN2API_DEFAULT_MAX_TOKENS` | `8192` | 默认 max_tokens |
+| `ZEN2API_MODEL_DISCOVERY_TTL_SECONDS` | `900` | 模型缓存 TTL |
+| `ZEN_UPSTREAM_URL` | opencode.ai | Zen 上游地址 |
+| `KILO_UPSTREAM_URL` | kilo.ai | Kilo 上游地址 |
+| `ZEN2API_LOG_LEVEL` | `INFO` | 日志级别 |
+| `ZEN2API_STATS_FILE` | `stats.json` | 统计数据文件 |
+
+## 接入 Hermes Agent
+
+### 1. 启动 zen2api
 
 ```bash
-pkg install python build-essential openssl
-pip install --upgrade pip
-pip install -r requirements.txt
+ZEN2API_ENABLED=1 ZEN2API_PORT=9015 ./zen2api
 ```
 
-### Q: 如何后台运行？
+### 2. 配置 Hermes
+
+在 `~/.hermes/config.yaml` 中添加：
+
+```yaml
+model: "minimax-m2.5-free"
+provider: zenlocal
+
+custom_providers:
+  - name: zenlocal
+    base_url: http://127.0.0.1:9015
+    transport: anthropic_messages
+    key_env: ZENLOCAL_API_KEY
+```
+
+### 3. 运行
 
 ```bash
-nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9016 > zen2api.log 2>&1 &
+ZENLOCAL_API_KEY="test" hermes -m "minimax-m2.5-free" --provider zenlocal
 ```
 
-### Q: 如何停止服务？
+## AI Agent 接入注意事项（重要）
+
+以下事项 AI agent 容易出错，接入时请逐一检查。
+
+### 1. `ZEN2API_ENABLED` 必须设为 `1`
+
+值必须是字符串 `"1"`，不是 `"true"` 或 `"True"` 或 `"yes"`。虽然 `ZEN2API_ENABLED=true` 也能被 envBool 识别，但建议统一用 `1`。
 
 ```bash
-pkill -f "uvicorn app.main:app"
-pkill -f "http.server"
+# 正确
+ZEN2API_ENABLED=1 ./zen2api
+
+# 错误 — 服务不会启动
+ZEN2API_ENABLED=false ./zen2api
 ```
 
-## 许可证
+如果未设置 `ZEN2API_ENABLED=1` 且也未开启 AnyRouter，进程会直接 Fatal 退出。
 
-本项目仅供学习研究使用。
+### 2. Hermes transport 类型必须是 `anthropic_messages`
+
+即使调用 `/v1/chat/completions`（OpenAI 格式端点），Hermes 的 transport 也必须配置为 `anthropic_messages`。这是 Hermes 内部的概念——它决定了 Hermes 如何构造请求体，与 zen2api 的端点选择无关。
+
+```yaml
+# 正确
+transport: anthropic_messages
+
+# 错误 — AI agent 容易猜这个值
+transport: openai_chat_completions
+```
+
+### 3. `key_env` 是环境变量名，不是密钥值
+
+Hermes 配置中的 `key_env` 指向一个**环境变量的名字**，而不是 API key 本身。
+
+```yaml
+# 正确 — ZENLOCAL_API_KEY 是环境变量名，运行时从环境读取
+key_env: ZENLOCAL_API_KEY
+
+# 错误 — 不要把 key 值直接写在这里
+key_env: sk-xxxx
+```
+
+如果 zen2api 未设置 `ZEN2API_KEY`（默认不校验），则 Hermes 传入任意值即可：`ZENLOCAL_API_KEY="any"`。
+
+### 4. 模型名必须与 `/v1/models` 返回的一致
+
+可用的模型 ID 由 zen2api 动态发现并合并 Zen 和 Kilo 上游后决定。启动后查看：
+
+```bash
+curl -s http://127.0.0.1:9015/v1/models | jq '.data[].id'
+```
+
+常见的模型 ID 示例：
+- `minimax-m2.5-free`（Zen，Anthropic 原生协议）
+- `kilo-auto/free`（Kilo，免费模型轮转，Anthropic→OpenAI 转换）
+- `nvidia/nemotron-3-super-120b-a12b:free`（Kilo）
+
+模型路由是自动的：Kilo 模型走 Anthropic→OpenAI 转换，其余走 Zen 直通。
+
+### 5. Anthropic Messages 端点需要 `max_tokens`
+
+请求 `/v1/messages`（Anthropic 格式）时，`max_tokens` 是必填字段。zen2api 会自动补默认值 8192，但不建议依赖。如果上游返回校验错误，检查是否缺了这个字段。
+
+### 6. 端口默认 9015，不是 8080
+
+```bash
+# 正确
+base_url: http://127.0.0.1:9015
+
+# 错误 — agent 常猜 8080、3000、11434 等
+base_url: http://127.0.0.1:8080
+```
+
+### 7. 启动即运行，无配置文件
+
+zen2api 是零配置启动的，所有配置通过环境变量传入，没有 `.env` 文件、`config.yaml` 或 `config.json`。AI agent 不应尝试寻找或创建配置文件。
+
+### 8. 不要尝试 `pip install` 或 `npm install`
+
+zen2api 是 Go 编译的单一二进制文件，不是 Python 或 Node 项目。Agent 不应执行 `pip install -r requirements.txt` 或 `npm install`。
+
+### 9. 流式响应默认支持
+
+所有端点均支持 `stream: true`。非流式请求也正常运作。Agent 不应假设只支持其中一种模式。
+
+### 10. 速率限制默认 10 RPS
+
+每个 API key 每秒 10 个请求。Agent 并发调用时注意不要超过此限制，否则返回 429。
+
+### 11. AnyRouter 是独立服务
+
+AnyRouter 需要单独开启（`ZEN2API_ANYROUTER_ENABLED=1`），监听独立端口（默认 18888）。不开启则只有主代理服务。
+
+### 12. API Key 认证
+
+- 如果 `ZEN2API_KEY` 为空（默认），不校验任何认证，所有请求放行
+- 如果设置了 `ZEN2API_KEY`，客户端必须通过 `x-api-key` header 或 `Authorization: Bearer <key>` 传入匹配的 key
+- Hermes 通过 `key_env` 指定的环境变量自动添加 `x-api-key` header
+
+### 13. 不要假设上游 URL 可直连
+
+zen2api 是一个代理，上游 URL（`ZEN_UPSTREAM_URL`、`KILO_UPSTREAM_URL`）由服务端配置。客户端只需连接 zen2api 的地址即可。
+
+### 14. 管理面板路径是 `/admin`
+
+启动后访问 `http://127.0.0.1:9015/admin`，可以查看仪表盘、模型列表、系统配置、速率限制等。不是 `/`、`/ui`、`/dashboard`。
+
+## License
+
+MIT
