@@ -19,7 +19,7 @@
 ### Termux 一键安装（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ymymssss/zen2api-re/master/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ymymssss/zen2api-re/main/setup.sh | bash
 ```
 
 脚本自动完成：环境检测 → 安装依赖 → 源码编译 → 安装到 PATH → 创建 `zen` 命令 → 写入环境变量 → 生成 Hermes 配置。
