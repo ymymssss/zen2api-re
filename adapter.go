@@ -21,6 +21,19 @@ type Adapter interface {
 	AdaptResponse(body map[string]any, statusCode int) *AdaptedResponse
 }
 
+// StreamAdapter is an optional interface for adapters that support SSE streaming transformation.
+// When an Adapter implements StreamAdapter, proxyStreamRequest will use it to transform
+// SSE events in real-time as they arrive from the upstream.
+type StreamAdapter interface {
+	// TransformSSEEvent transforms a single SSE event line (without "data: " prefix).
+	// It returns the transformed lines to write to the client, or nil to skip.
+	// The adapter maintains internal state across the stream.
+	TransformSSEEvent(line string) []string
+
+	// FinalizeSSE returns any final SSE events to write at stream end (e.g., [DONE]).
+	FinalizeSSE() []string
+}
+
 // UpstreamResult holds the raw upstream response.
 type UpstreamResult struct {
 	StatusCode int

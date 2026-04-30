@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -89,21 +91,53 @@ func proxyStreamRequest(adapter Adapter, reqBody map[string]any, reqHeaders map[
 		return fmt.Errorf("streaming not supported")
 	}
 
-	// Pass through SSE chunks — for Anthropic → OpenAI streaming, we'd transform
-	// For now, pass through and let the client handle it
-	buf := make([]byte, 4096)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			// Transform SSE if needed
-			transformed := transformSSEChunk(buf[:n], adapter)
-			if _, werr := w.Write(transformed); werr != nil {
-				return werr
+	// Check if adapter supports streaming transformation
+	streamAdapter, hasStreamAdapter := adapter.(StreamAdapter)
+
+	if hasStreamAdapter {
+		// Use line-by-line reading with SSE transformation
+		scanner := bufio.NewScanner(resp.Body)
+		// Increase buffer for large SSE events (e.g., large tool definitions)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			transformed := streamAdapter.TransformSSEEvent(line)
+			for _, t := range transformed {
+				if _, err := w.Write([]byte(t)); err != nil {
+					return err
+				}
 			}
 			flusher.Flush()
 		}
-		if err != nil {
-			break
+
+		// Write final SSE events (e.g., [DONE])
+		for _, final := range streamAdapter.FinalizeSSE() {
+			if _, err := w.Write([]byte(final)); err != nil {
+				return err
+			}
+		}
+		flusher.Flush()
+
+		if err := scanner.Err(); err != nil {
+			Warning.Printf("SSE scanner error: %v", err)
+		}
+	} else {
+		// Passthrough mode: read line-by-line without transformation
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+
+		for scanner.Scan() {
+			line := scanner.Text() + "\n"
+			if _, err := w.Write([]byte(line)); err != nil {
+				return err
+			}
+			flusher.Flush()
+		}
+
+		if err := scanner.Err(); err != nil {
+			Warning.Printf("SSE passthrough scanner error: %v", err)
 		}
 	}
 
@@ -111,6 +145,10 @@ func proxyStreamRequest(adapter Adapter, reqBody map[string]any, reqHeaders map[
 	return nil
 }
 
-func transformSSEChunk(data []byte, adapter Adapter) []byte {
-	return data // default: pass-through; adapters can override by type assertion
+// extractModelFromBody tries to get the model name from a request body.
+func extractModelFromBody(body map[string]any) string {
+	if m, ok := body["model"].(string); ok {
+		return strings.TrimSpace(m)
+	}
+	return "unknown"
 }

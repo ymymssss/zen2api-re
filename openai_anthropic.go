@@ -1,8 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 )
 
 // OpenAIAnthropicAdapter converts OpenAI Chat Completions requests to Anthropic Messages.
@@ -10,6 +14,7 @@ type OpenAIAnthropicAdapter struct {
 	APIKey      string
 	UpstreamURL string
 	cfg         *Config
+	streamState *openAIStreamState
 }
 
 func (a *OpenAIAnthropicAdapter) AdaptRequest(body map[string]any, _ map[string]string) *AdaptedRequest {
@@ -275,4 +280,256 @@ func mapStopReason(r any) string {
 func toJSONString(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// ── StreamAdapter implementation (Anthropic SSE → OpenAI SSE) ──────
+
+// openAIStreamState tracks state for Anthropic→OpenAI SSE conversion.
+type openAIStreamState struct {
+	completionID   string
+	model          string
+	roleEmitted    bool
+	toolIndexMap   map[string]int
+	nextToolIndex  int
+	finishEmitted  bool
+	textBlockOpen  bool
+}
+
+func newOpenAIStreamState() *openAIStreamState {
+	return &openAIStreamState{
+		completionID:  "chatcmpl-" + randomHex(24),
+		toolIndexMap:  make(map[string]int),
+	}
+}
+
+func (a *OpenAIAnthropicAdapter) TransformSSEEvent(line string) []string {
+	return transformAnthropicSSEToOpenAI(line, a.streamState)
+}
+
+func (a *OpenAIAnthropicAdapter) FinalizeSSE() []string {
+	if a.streamState == nil || a.streamState.finishEmitted {
+		return []string{"data: [DONE]\n\n"}
+	}
+	// Emit final finish if not yet emitted
+	st := a.streamState
+	chunk := map[string]any{
+		"id":      st.completionID,
+		"object":  "chat.completion.chunk",
+		"created": 0,
+		"model":   st.model,
+		"choices": []any{map[string]any{
+			"index":         0,
+			"delta":         map[string]any{},
+			"finish_reason": "stop",
+		}},
+	}
+	data, _ := json.Marshal(chunk)
+	st.finishEmitted = true
+	return []string{fmt.Sprintf("data: %s\n\ndata: [DONE]\n\n", string(data))}
+}
+
+var _ StreamAdapter = (*OpenAIAnthropicAdapter)(nil)
+
+// streamState is attached to the adapter when streaming starts.
+// It's set by routes.go before calling proxyStreamRequest.
+func (a *OpenAIAnthropicAdapter) initStreamState() {
+	a.streamState = newOpenAIStreamState()
+}
+
+type openAIAnthropicStreamAdapter struct {
+	state *openAIStreamState
+}
+
+func transformAnthropicSSEToOpenAI(line string, st *openAIStreamState) []string {
+	if st == nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(line)
+
+	// event lines are handled implicitly by data payloads
+	if strings.HasPrefix(trimmed, "event: ") {
+		return nil
+	}
+
+	if !strings.HasPrefix(trimmed, "data: ") {
+		return nil
+	}
+
+	payload := strings.TrimPrefix(trimmed, "data: ")
+	if payload == "[DONE]" {
+		return nil // handled by FinalizeSSE
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+		return nil
+	}
+
+	var results []string
+
+	switch obj["type"] {
+	case "message_start":
+		msg, _ := obj["message"].(map[string]any)
+		if mid, ok := msg["id"].(string); ok {
+			st.completionID = mid
+		}
+		if m, ok := msg["model"].(string); ok {
+			st.model = m
+		}
+		if !st.roleEmitted {
+			chunk := map[string]any{
+				"id":      st.completionID,
+				"object":  "chat.completion.chunk",
+				"created": 0,
+				"model":   st.model,
+				"choices": []any{map[string]any{
+					"index":         0,
+					"delta":         map[string]any{"role": "assistant"},
+					"finish_reason": nil,
+				}},
+			}
+			data, _ := json.Marshal(chunk)
+			results = append(results, fmt.Sprintf("data: %s\n\n", string(data)))
+			st.roleEmitted = true
+		}
+
+	case "content_block_start":
+		block, _ := obj["content_block"].(map[string]any)
+		blockType, _ := block["type"].(string)
+		if blockType == "tool_use" {
+			toolID, _ := block["id"].(string)
+			toolName, _ := block["name"].(string)
+			if _, ok := st.toolIndexMap[toolID]; !ok {
+				st.toolIndexMap[toolID] = st.nextToolIndex
+				st.nextToolIndex++
+			}
+			idx := st.toolIndexMap[toolID]
+			chunk := map[string]any{
+				"id":      st.completionID,
+				"object":  "chat.completion.chunk",
+				"created": 0,
+				"model":   st.model,
+				"choices": []any{map[string]any{
+					"index": 0,
+					"delta": map[string]any{
+						"tool_calls": []any{map[string]any{
+							"index":    idx,
+							"id":       toolID,
+							"type":     "function",
+							"function": map[string]any{"name": toolName, "arguments": ""},
+						}},
+					},
+					"finish_reason": nil,
+				}},
+			}
+			data, _ := json.Marshal(chunk)
+			results = append(results, fmt.Sprintf("data: %s\n\n", string(data)))
+		}
+		// text content_block_start doesn't emit anything in OpenAI format
+
+	case "content_block_delta":
+		delta, _ := obj["delta"].(map[string]any)
+		deltaType, _ := delta["type"].(string)
+
+		if deltaType == "text_delta" {
+			st.textBlockOpen = true
+			text, _ := delta["text"].(string)
+			chunk := map[string]any{
+				"id":      st.completionID,
+				"object":  "chat.completion.chunk",
+				"created": 0,
+				"model":   st.model,
+				"choices": []any{map[string]any{
+					"index":         0,
+					"delta":         map[string]any{"content": text},
+					"finish_reason": nil,
+				}},
+			}
+			data, _ := json.Marshal(chunk)
+			results = append(results, fmt.Sprintf("data: %s\n\n", string(data)))
+		} else if deltaType == "input_json_delta" {
+			partialJSON, _ := delta["partial_json"].(string)
+			idx, _ := obj["index"].(float64)
+			chunk := map[string]any{
+				"id":      st.completionID,
+				"object":  "chat.completion.chunk",
+				"created": 0,
+				"model":   st.model,
+				"choices": []any{map[string]any{
+					"index": 0,
+					"delta": map[string]any{
+						"tool_calls": []any{map[string]any{
+							"index":    int(idx),
+							"function": map[string]any{"arguments": partialJSON},
+						}},
+					},
+					"finish_reason": nil,
+				}},
+			}
+			data, _ := json.Marshal(chunk)
+			results = append(results, fmt.Sprintf("data: %s\n\n", string(data)))
+		}
+
+	case "message_delta":
+		if !st.finishEmitted {
+			delta, _ := obj["delta"].(map[string]any)
+			stopReason, _ := delta["stop_reason"].(string)
+			openaiFinish := "stop"
+			if stopReason == "tool_use" {
+				openaiFinish = "tool_calls"
+			} else if stopReason == "max_tokens" {
+				openaiFinish = "length"
+			}
+			chunk := map[string]any{
+				"id":      st.completionID,
+				"object":  "chat.completion.chunk",
+				"created": 0,
+				"model":   st.model,
+				"choices": []any{map[string]any{
+					"index":         0,
+					"delta":         map[string]any{},
+					"finish_reason": openaiFinish,
+				}},
+			}
+			// Attach usage if available
+			if usage, ok := obj["usage"].(map[string]any); ok {
+				chunk["usage"] = usage
+			}
+			data, _ := json.Marshal(chunk)
+			results = append(results, fmt.Sprintf("data: %s\n\n", string(data)))
+			st.finishEmitted = true
+		}
+
+	case "message_stop":
+		if !st.finishEmitted {
+			chunk := map[string]any{
+				"id":      st.completionID,
+				"object":  "chat.completion.chunk",
+				"created": 0,
+				"model":   st.model,
+				"choices": []any{map[string]any{
+					"index":         0,
+					"delta":         map[string]any{},
+					"finish_reason": "stop",
+				}},
+			}
+			data, _ := json.Marshal(chunk)
+			results = append(results, fmt.Sprintf("data: %s\n\n", string(data)))
+			st.finishEmitted = true
+		}
+	}
+
+	return results
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n/2+1)
+	if _, err := rand.Read(b); err != nil {
+		// fallback: use timestamp-based randomness
+		for i := range b {
+			b[i] = byte(time.Now().UnixNano()>>(i%8)) ^ 0xAA
+		}
+	}
+	return hex.EncodeToString(b)[:n]
 }

@@ -1,12 +1,17 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // AnthropicOpenAIAdapter converts Anthropic Messages requests to OpenAI Chat Completions.
 type AnthropicOpenAIAdapter struct {
 	APIKey      string
 	UpstreamURL string
 	cfg         *Config
+	streamState *anthropicStreamState
 }
 
 func (a *AnthropicOpenAIAdapter) AdaptRequest(body map[string]any, _ map[string]string) *AdaptedRequest {
@@ -251,4 +256,244 @@ func mapStopReasonToAnthropic(choices []any) string {
 	default:
 		return "end_turn"
 	}
+}
+
+// ── StreamAdapter implementation (OpenAI SSE → Anthropic SSE) ──────
+
+type anthropicStreamState struct {
+	msgID        string
+	model        string
+	msgStarted   bool
+	textBlockIdx int
+	textStarted  bool
+	nextBlockIdx int
+	toolBlocks   map[int]*toolBlockState
+	finishReason string
+	finalUsage   map[string]any
+}
+
+type toolBlockState struct {
+	anthropicIdx int
+	id           string
+	name         string
+	started      bool
+}
+
+func newAnthropicStreamState() *anthropicStreamState {
+	return &anthropicStreamState{
+		msgID:      "msg_" + randomHex(24),
+		toolBlocks: make(map[int]*toolBlockState),
+		textBlockIdx: -1,
+	}
+}
+
+func (a *AnthropicOpenAIAdapter) TransformSSEEvent(line string) []string {
+	return transformOpenAISSEToAnthropic(line, a.streamState)
+}
+
+func (a *AnthropicOpenAIAdapter) FinalizeSSE() []string {
+	st := a.streamState
+	if st == nil || !st.msgStarted {
+		return nil
+	}
+	var results []string
+
+	// Emit content_block_stop for text
+	if st.textBlockIdx >= 0 {
+		data, _ := json.Marshal(map[string]any{
+			"type":  "content_block_stop",
+			"index": st.textBlockIdx,
+		})
+		results = append(results, fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", string(data)))
+	}
+
+	// Emit content_block_stop for tool blocks
+	for _, tb := range st.toolBlocks {
+		if tb.started {
+			data, _ := json.Marshal(map[string]any{
+				"type":  "content_block_stop",
+				"index": tb.anthropicIdx,
+			})
+			results = append(results, fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", string(data)))
+		}
+	}
+
+	// Emit message_delta
+	finishReason := st.finishReason
+	if finishReason == "" {
+		finishReason = "end_turn"
+	}
+	msgDelta := map[string]any{
+		"type": "message_delta",
+		"delta": map[string]any{
+			"stop_reason":   finishReason,
+			"stop_sequence": nil,
+		},
+		"usage": map[string]any{"output_tokens": 0},
+	}
+	if st.finalUsage != nil {
+		if ct, ok := st.finalUsage["completion_tokens"].(float64); ok {
+			msgDelta["usage"] = map[string]any{"output_tokens": int(ct)}
+		}
+	}
+	deltaData, _ := json.Marshal(msgDelta)
+	results = append(results, fmt.Sprintf("event: message_delta\ndata: %s\n\n", string(deltaData)))
+
+	// Emit message_stop
+	stopData, _ := json.Marshal(map[string]any{"type": "message_stop"})
+	results = append(results, fmt.Sprintf("event: message_stop\ndata: %s\n\n", string(stopData)))
+
+	return results
+}
+
+var _ StreamAdapter = (*AnthropicOpenAIAdapter)(nil)
+
+func transformOpenAISSEToAnthropic(line string, st *anthropicStreamState) []string {
+	if st == nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "data: ") {
+		return nil
+	}
+
+	payload := strings.TrimPrefix(trimmed, "data: ")
+	if payload == "[DONE]" {
+		return nil
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+		return nil
+	}
+
+	choices, _ := obj["choices"].([]any)
+	if len(choices) == 0 {
+		return nil
+	}
+	choice, _ := choices[0].(map[string]any)
+	delta, _ := choice["delta"].(map[string]any)
+
+	var results []string
+
+	if m, ok := obj["model"].(string); ok && m != "" {
+		st.model = m
+	}
+
+	// Emit message_start on first event
+	if !st.msgStarted {
+		startData, _ := json.Marshal(map[string]any{
+			"type": "message_start",
+			"message": map[string]any{
+				"id":           st.msgID,
+				"type":         "message",
+				"role":         "assistant",
+				"model":        st.model,
+				"content":      []any{},
+				"stop_reason":  nil,
+				"stop_sequence": nil,
+				"usage":        map[string]any{"input_tokens": 0, "output_tokens": 1},
+			},
+		})
+		results = append(results, fmt.Sprintf("event: message_start\ndata: %s\n\n", string(startData)))
+		st.msgStarted = true
+	}
+
+	// Handle text delta
+	if content, ok := delta["content"].(string); ok && content != "" {
+		if !st.textStarted {
+			st.textBlockIdx = st.nextBlockIdx
+			st.nextBlockIdx++
+			cbData, _ := json.Marshal(map[string]any{
+				"type":  "content_block_start",
+				"index": st.textBlockIdx,
+				"content_block": map[string]any{
+					"type": "text",
+					"text": "",
+				},
+			})
+			results = append(results, fmt.Sprintf("event: content_block_start\ndata: %s\n\n", string(cbData)))
+			st.textStarted = true
+		}
+		deltaData, _ := json.Marshal(map[string]any{
+			"type":  "content_block_delta",
+			"index": st.textBlockIdx,
+			"delta": map[string]any{
+				"type": "text_delta",
+				"text": content,
+			},
+		})
+		results = append(results, fmt.Sprintf("event: content_block_delta\ndata: %s\n\n", string(deltaData)))
+	}
+
+	// Handle tool calls
+	if toolCalls, ok := delta["tool_calls"].([]any); ok {
+		for _, tc := range toolCalls {
+			tcMap, _ := tc.(map[string]any)
+			tcIdx := int(tcMap["index"].(float64))
+			tcID, _ := tcMap["id"].(string)
+			fn, _ := tcMap["function"].(map[string]any)
+
+			tb, exists := st.toolBlocks[tcIdx]
+			if !exists {
+				tb = &toolBlockState{anthropicIdx: st.nextBlockIdx, id: tcID}
+				st.nextBlockIdx++
+				st.toolBlocks[tcIdx] = tb
+			}
+
+			if tcID != "" {
+				tb.id = tcID
+			}
+			if name, ok := fn["name"].(string); ok && name != "" {
+				tb.name = name
+			}
+
+			if !tb.started && tb.id != "" {
+				tb.started = true
+				cbData, _ := json.Marshal(map[string]any{
+					"type":  "content_block_start",
+					"index": tb.anthropicIdx,
+					"content_block": map[string]any{
+						"type":  "tool_use",
+						"id":    tb.id,
+						"name":  tb.name,
+						"input": map[string]any{},
+					},
+				})
+				results = append(results, fmt.Sprintf("event: content_block_start\ndata: %s\n\n", string(cbData)))
+			}
+
+			if args, ok := fn["arguments"].(string); ok && args != "" {
+				deltaData, _ := json.Marshal(map[string]any{
+					"type":  "content_block_delta",
+					"index": tb.anthropicIdx,
+					"delta": map[string]any{
+						"type":         "input_json_delta",
+						"partial_json": args,
+					},
+				})
+				results = append(results, fmt.Sprintf("event: content_block_delta\ndata: %s\n\n", string(deltaData)))
+			}
+		}
+	}
+
+	// Handle finish_reason
+	if fr, ok := choice["finish_reason"].(string); ok && fr != "" && fr != "null" {
+		switch fr {
+		case "stop":
+			st.finishReason = "end_turn"
+		case "tool_calls":
+			st.finishReason = "tool_use"
+		case "length":
+			st.finishReason = "max_tokens"
+		}
+	}
+
+	// Track usage
+	if usage, ok := obj["usage"].(map[string]any); ok {
+		st.finalUsage = usage
+	}
+
+	return results
 }

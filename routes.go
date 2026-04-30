@@ -83,6 +83,7 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if stream {
+		adapter.streamState = newOpenAIStreamState()
 		if err := proxyStreamRequest(adapter, body, headersToMap(r), "", w); err != nil {
 			Error.Printf("stream failed: %v", err)
 			writeJSON(w, 500, map[string]any{"error": map[string]any{"message": err.Error()}})
@@ -119,13 +120,29 @@ func handleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	adapter := &AnthropicPassthroughAdapter{
-		APIKey:      cfg.APIKey,
-		UpstreamURL: cfg.ZenUpstreamURL,
-		cfg:         cfg,
+	model := extractModelFromBody(body)
+	useKilo := isKiloModel(model)
+
+	var adapter Adapter
+	if useKilo {
+		adapter = &AnthropicOpenAIAdapter{
+			APIKey:      cfg.APIKey,
+			UpstreamURL: cfg.KiloUpstreamURL,
+			cfg:         cfg,
+		}
+	} else {
+		adapter = &AnthropicPassthroughAdapter{
+			APIKey:      cfg.APIKey,
+			UpstreamURL: cfg.ZenUpstreamURL,
+			cfg:         cfg,
+		}
 	}
 
 	if stream {
+		// Initialize stream state for adapters that support it
+		if a, ok := adapter.(*AnthropicOpenAIAdapter); ok {
+			a.streamState = newAnthropicStreamState()
+		}
 		if err := proxyStreamRequest(adapter, body, headersToMap(r), "", w); err != nil {
 			writeJSON(w, 500, map[string]any{"type": "error", "error": map[string]any{"message": err.Error()}})
 		}
@@ -370,4 +387,19 @@ func (a *ResponsesAdapter) AdaptResponse(body map[string]any, status int) *Adapt
 			},
 		},
 	}
+}
+
+// isKiloModel checks whether a model ID should be routed to the Kilo upstream.
+// Uses cached data only; does not trigger model discovery.
+func isKiloModel(model string) bool {
+	modelLock.RLock()
+	kiloModels := modelCache["kilo"]
+	modelLock.RUnlock()
+
+	for _, m := range kiloModels {
+		if id, ok := m["id"].(string); ok && strings.EqualFold(id, model) {
+			return true
+		}
+	}
+	return false
 }

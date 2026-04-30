@@ -77,3 +77,18 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)
 }
+
+// Flush implements http.Flusher by delegating to the underlying writer.
+// This is required because Go only promotes methods from the embedded
+// interface type itself, not from other interfaces the concrete value
+// may satisfy. Without this, SSE streaming breaks.
+func (rw *responseWriter) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Unwrap returns the underlying ResponseWriter for type assertions.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}

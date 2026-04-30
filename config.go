@@ -64,7 +64,7 @@ func LoadConfig() *Config {
 
 		ModelDiscoveryTTL:     envInt("ZEN2API_MODEL_DISCOVERY_TTL_SECONDS", 900),
 		ModelDiscoveryTimeout: envInt("ZEN2API_MODEL_DISCOVERY_TIMEOUT_SECONDS", 20),
-		NonModalRPS:           envFloat("ZEN2API_NON_MODAL_RPS", 2),
+		NonModalRPS:           envFloat("ZEN2API_NON_MODAL_RPS", 10),
 		DefaultMaxTokens:      envInt("ZEN2API_DEFAULT_MAX_TOKENS", 8192),
 
 		AnyRouterEnabled:        envBool("ZEN2API_ANYROUTER_ENABLED", false),
