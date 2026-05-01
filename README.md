@@ -61,26 +61,82 @@ ZEN2API_ENABLED=1 ZEN2API_PORT=9015 ./zen2api
 ZEN2API_ENABLED=1 ZEN2API_PORT=9015 ./zen2api
 ```
 
-### 2. 配置 Hermes
+### 2. 配置 Hermes（使用官方 CLI）
 
-在 `~/.hermes/config.yaml` 中添加：
+```bash
+# 添加 zenlocal provider
+hermes config set providers.zenlocal.name ZenLocal
+hermes config set providers.zenlocal.base_url http://127.0.0.1:9015
+hermes config set providers.zenlocal.transport anthropic_messages
+hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY
 
-```yaml
-model: "minimax-m2.5-free"
-provider: zenlocal
-
-providers:
-  zenlocal:
-    name: ZenLocal
-    base_url: http://127.0.0.1:9015
-    transport: anthropic_messages
-    key_env: ZENLOCAL_API_KEY
+# 设为默认模型和 provider
+hermes config set model minimax-m2.5-free
+hermes config set provider zenlocal
 ```
 
 ### 3. 运行
 
 ```bash
-ZENLOCAL_API_KEY="test" hermes -m "minimax-m2.5-free" --provider zenlocal
+ZENLOCAL_API_KEY="noauth" hermes -z "你的问题"
+# 或者显式指定模型和 provider：
+ZENLOCAL_API_KEY="noauth" hermes -z "你的问题" -m minimax-m2.5-free --provider zenlocal
+```
+
+## 模型名修复：点号变连字符问题
+
+### 问题来源
+
+Hermes 在 `agent/anthropic_adapter.py` 中有一个 `normalize_model_name()` 函数，它会将模型名中的点号 (`.`) 替换为连字符 (`-`)，以符合 Anthropic 的命名风格：
+
+```
+minimax-m2.5-free  →  minimax-m2-5-free   （点号变连字符）
+```
+
+这个行为由 `_anthropic_preserve_dots()` 控制：它只对已知的特定 provider（如 minimax、opencode-go）或匹配特定 base_url 模式的请求保留点号。对于用户自定义的 `zenlocal` provider（base_url 为 `http://127.0.0.1:9015`），该函数返回 `False`，导致模型名被"标准化"为带连字符的版本。
+
+### 为什么会导致失败
+
+上游 opencode.ai 只识别原始的点号格式 `minimax-m2.5-free`。当收到连字符版本 `minimax-m2-5-free` 时：
+
+1. 上游返回**空的 SSE 流**（0 个事件）
+2. Anthropic SDK 的内部状态 `__final_message_snapshot` 保持为 `None`
+3. 调用 `get_final_message()` 时触发 `_messages.py:94` 的 `assert self.__final_message_snapshot is not None`
+4. Hermes 收到一个无消息的 `AssertionError`，显示为空错误
+
+### 修复方案
+
+zen2api 在 `proxy.go` 的 `normalizeModelName()` 中进行**反向修复**，将连字符恢复为点号：
+
+```go
+// minimax-m2-5-free → minimax-m2.5-free
+func normalizeModelName(model string) string {
+    if strings.HasPrefix(model, "minimax-") {
+        rest := strings.TrimPrefix(model, "minimax-")
+        if idx := strings.Index(rest, "-"); idx > 0 {
+            model = "minimax-" + rest[:idx] + "." + rest[idx+1:]
+        }
+    }
+    return model
+}
+```
+
+修复发生在 `extractModelFromBody()` 中，对每个进入 `/v1/messages` 的请求自动生效。同时修复后的模型名会写回 `body["model"]`，确保后续的 Kilo 路由判断、上游转发都使用正确的点号格式。
+
+### 修复前后对比
+
+```
+修复前:
+  Hermes: minimax-m2.5-free → minimax-m2-5-free → zen2api → opencode.ai
+                                                              ↓
+                                                        不认识此模型
+                                                              ↓
+                                                    返回空流, assert 失败
+
+修复后:
+  Hermes: minimax-m2.5-free → minimax-m2-5-free → zen2api (修复) → minimax-m2.5-free → opencode.ai
+                                                                                        ↓
+                                                                                  正常响应 ✓
 ```
 
 ## AI Agent 接入注意事项（重要）

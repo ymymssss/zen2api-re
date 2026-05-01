@@ -337,34 +337,37 @@ else
     info "环境变量已存在于 $RC_FILE，跳过"
 fi
 
-# ── Hermes 配置提示 ─────────────────────────────────────────────────────────
+# ── Hermes 配置 ────────────────────────────────────────────────────────────
 step "Hermes Agent 接入配置"
 
-# 检查是否安装了 Hermes
-HERMES_CONFIG_DIR="$TERMUX_HOME/.hermes"
-mkdir -p "$HERMES_CONFIG_DIR"
+# 检查 Hermes 是否已安装
+if command -v hermes &>/dev/null; then
+    info "检测到 Hermes，使用官方 CLI 配置 provider..."
 
-# 生成 Hermes 配置文件（如果不存在）
-if [[ ! -f "$HERMES_CONFIG_DIR/config.yaml" ]]; then
-    cat > "$HERMES_CONFIG_DIR/config.yaml" << 'HERMESEOF'
-# Hermes Agent 配置 — 接入 zen2api
-# 更多配置项: https://github.com/NousResearch/hermes-agent
+    # 添加 zenlocal provider（使用 hermes config set 官方命令）
+    hermes config set providers.zenlocal.name ZenLocal 2>/dev/null || true
+    hermes config set providers.zenlocal.base_url http://127.0.0.1:9015 2>/dev/null || true
+    hermes config set providers.zenlocal.transport anthropic_messages 2>/dev/null || true
+    hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY 2>/dev/null || true
 
-model: "minimax-m2.5-free"
-provider: zenlocal
+    # 设为默认模型和 provider
+    hermes config set model minimax-m2.5-free 2>/dev/null || true
+    hermes config set provider zenlocal 2>/dev/null || true
 
-providers:
-  zenlocal:
-    name: ZenLocal
-    base_url: http://127.0.0.1:9015
-    transport: anthropic_messages
-    key_env: ZENLOCAL_API_KEY
-HERMESEOF
-    info "Hermes 配置已生成: $HERMES_CONFIG_DIR/config.yaml"
-    detail "transport 已正确设置为 anthropic_messages"
-    detail "base_url 指向 zen2api 默认端口 9015"
+    info "Hermes 配置完成"
+    detail "provider: zenlocal → http://127.0.0.1:9015"
+    detail "transport: anthropic_messages"
+    detail "通过 'hermes config show' 或 'hermes config edit' 查看/修改"
 else
-    info "Hermes 配置已存在，跳过"
+    warn "未检测到 Hermes，跳过配置"
+    detail "安装 Hermes 后运行以下命令完成配置:"
+    detail ""
+    detail "  hermes config set providers.zenlocal.name ZenLocal"
+    detail "  hermes config set providers.zenlocal.base_url http://127.0.0.1:9015"
+    detail "  hermes config set providers.zenlocal.transport anthropic_messages"
+    detail "  hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY"
+    detail "  hermes config set model minimax-m2.5-free"
+    detail "  hermes config set provider zenlocal"
 fi
 
 # ── 安装完成 ────────────────────────────────────────────────────────────────
