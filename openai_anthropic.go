@@ -59,9 +59,8 @@ func (a *OpenAIAnthropicAdapter) AdaptRequest(body map[string]any, _ map[string]
 		URL:    a.UpstreamURL,
 		Method: "POST",
 		Headers: map[string]string{
-			"content-type":      "application/json",
-			"x-api-key":         a.APIKey,
-			"anthropic-version": a.cfg.ZenAnthropicVersion,
+			"content-type": "application/json",
+			"x-api-key":    a.APIKey,
 		},
 		Body: anthropic,
 	}

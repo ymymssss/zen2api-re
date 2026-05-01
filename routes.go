@@ -23,10 +23,14 @@ func newMux() http.Handler {
 	mux.HandleFunc("/v1/stats", handleStats)
 	mux.HandleFunc("/v1/stats/flush", handleStatsFlush)
 
-	// /anthropic 前缀兼容 — Hermes 通过 URL 后缀自动检测 api_mode
-	// 当 base_url 以 /anthropic 结尾时 Ananthropic SDK 拼接为 /anthropic/v1/messages
+	// /anthropic prefix compatibility — Hermes auto-detects api_mode from URL suffix.
+	// When base_url ends with /anthropic, the Anthropic SDK appends /v1/messages.
+	// But if api_mode resolves to chat_completions, the OpenAI SDK appends
+	// /chat/completions instead, producing /anthropic/chat/completions (or with /v1).
 	mux.HandleFunc("/anthropic/v1/messages", handleMessages)
 	mux.HandleFunc("/anthropic/v1/models", handleModels)
+	mux.HandleFunc("/anthropic/v1/chat/completions", handleChatCompletions)
+	mux.HandleFunc("/anthropic/chat/completions", handleChatCompletions)
 
 	// Admin API
 	mux.HandleFunc("/admin/api/stats", handleAdminStats)
