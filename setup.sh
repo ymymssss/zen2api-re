@@ -350,9 +350,10 @@ if command -v hermes &>/dev/null; then
     hermes config set providers.zenlocal.transport anthropic_messages 2>/dev/null || true
     hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY 2>/dev/null || true
 
-    # 设为默认模型和 provider
-    hermes config set model minimax-m2.5-free 2>/dev/null || true
-    hermes config set provider zenlocal 2>/dev/null || true
+    # 设为默认模型和 provider — 必须用 model.default / model.provider
+    # 不能用 hermes config set model <value>（那会写成字符串，导致 provider 不生效）
+    hermes config set model.default minimax-m2.5-free 2>/dev/null || true
+    hermes config set model.provider zenlocal 2>/dev/null || true
 
     info "Hermes 配置完成"
     detail "provider: zenlocal → http://127.0.0.1:9015"
@@ -366,8 +367,8 @@ else
     detail "  hermes config set providers.zenlocal.base_url http://127.0.0.1:9015"
     detail "  hermes config set providers.zenlocal.transport anthropic_messages"
     detail "  hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY"
-    detail "  hermes config set model minimax-m2.5-free"
-    detail "  hermes config set provider zenlocal"
+    detail "  hermes config set model.default minimax-m2.5-free"
+    detail "  hermes config set model.provider zenlocal"
 fi
 
 # ── 安装完成 ────────────────────────────────────────────────────────────────

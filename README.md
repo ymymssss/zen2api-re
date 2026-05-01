@@ -70,17 +70,30 @@ hermes config set providers.zenlocal.base_url http://127.0.0.1:9015
 hermes config set providers.zenlocal.transport anthropic_messages
 hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY
 
-# 设为默认模型和 provider
-hermes config set model minimax-m2.5-free
-hermes config set provider zenlocal
+# 设为默认模型和 provider — 注意必须用 dict 格式！
+# hermes config set model <value> 会写入字符串格式，导致 provider 不生效。
+# 必须用 model.default 和 model.provider 分别设置：
+hermes config set model.default minimax-m2.5-free
+hermes config set model.provider zenlocal
 ```
+
+> **重要：** `model` 在 config.yaml 中必须是 dict 格式（含 `default` 和 `provider` 两个子键），
+> 不能是纯字符串。`hermes config set model <value>` 会写成字符串格式，
+> 导致 `load_cli_config()` 使用默认 `provider: "auto"` 而忽略根级别 `provider:`。
+> 这会造成 `hermes chat`（交互模式）回退到 openrouter，
+> 而 `hermes -z`（oneshot）因为使用 `resolve_runtime_provider` 不同路径而不受影响。
 
 ### 3. 运行
 
 ```bash
+# oneshot 模式（推荐，最可靠）
 ZENLOCAL_API_KEY="noauth" hermes -z "你的问题"
-# 或者显式指定模型和 provider：
-ZENLOCAL_API_KEY="noauth" hermes -z "你的问题" -m minimax-m2.5-free --provider zenlocal
+
+# 交互式 chat（需要上面 model.default + model.provider 都设对）
+ZENLOCAL_API_KEY="noauth" hermes chat -q "你的问题"
+
+# 或者直接 hermes（进入交互 REPL）
+ZENLOCAL_API_KEY="noauth" hermes
 ```
 
 ## 模型名修复：点号变连字符问题
