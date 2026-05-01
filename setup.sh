@@ -25,7 +25,7 @@ if [[ -d /data/data/com.termux/files/usr ]] && [[ "$(uname -o)" == "Android" ]];
     IS_TERMUX=true
 else
     warn "非 Termux 环境，按普通 Linux 处理"
-    TERMUX_PREFIX="/usr/local"
+    TERMUX_PREFIX="$HOME/.local"
     TERMUX_HOME="$HOME"
     IS_TERMUX=false
 fi
@@ -316,14 +316,19 @@ fi
 
 detail "Shell 配置文件: $RC_FILE"
 
-# 检查 PATH 是否包含 BIN_DIR
+# 确保 BIN_DIR 存在
+mkdir -p "$BIN_DIR"
+
+# 把 BIN_DIR 加入当前会话 PATH
 if ! echo "$PATH" | grep -q "$BIN_DIR"; then
-    detail "已将 $BIN_DIR 加入 PATH"
+    export PATH="$BIN_DIR:$PATH"
+    info "已将 $BIN_DIR 加入当前 PATH"
 fi
 
-# 添加 zen2api 默认环境变量到 RC 文件（如果还没加过）
+# 添加 zen2api 环境变量和 PATH 到 RC 文件（如果还没加过）
 if [[ "$SHELL" == *"fish"* ]]; then
     ZEN_ENV_BLOCK="# >>> zen2api 环境变量 (由 setup.sh 自动添加) >>>
+fish_add_path $BIN_DIR
 set -x ZEN2API_ENABLED 1
 set -x ZEN2API_PORT 9015
 set -x ZEN2API_HOST 127.0.0.1
@@ -331,6 +336,7 @@ set -x ZEN2API_HOST 127.0.0.1
 # <<< zen2api <<<"
 else
     ZEN_ENV_BLOCK="# >>> zen2api 环境变量 (由 setup.sh 自动添加) >>>
+export PATH=\"$BIN_DIR:\$PATH\"
 export ZEN2API_ENABLED=1
 export ZEN2API_PORT=9015
 export ZEN2API_HOST=127.0.0.1
