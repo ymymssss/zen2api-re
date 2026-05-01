@@ -138,6 +138,10 @@ step "安装到系统路径"
 BIN_DIR="$TERMUX_PREFIX/bin"
 mkdir -p "$BIN_DIR"
 
+# 停掉正在运行的实例，防止 "Text file busy"
+pkill -9 zen2api 2>/dev/null || true
+sleep 1
+
 # 复制到 PATH 目录
 cp zen2api "$BIN_DIR/zen2api"
 chmod +x "$BIN_DIR/zen2api"

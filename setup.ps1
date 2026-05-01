@@ -46,6 +46,14 @@ New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
 # ── 获取/编译 zen2api ───────────────────────────────────────────────────────
 step "获取 zen2api"
 
+# Stop running instance to avoid "Text file busy" / file lock errors
+$running = Get-Process zen2api -ErrorAction SilentlyContinue
+if ($running) {
+    detail "停止正在运行的 zen2api..."
+    $running | Stop-Process -Force
+    Start-Sleep -Seconds 1
+}
+
 $goCmd = Get-Command go -ErrorAction SilentlyContinue
 
 if ($goCmd) {
