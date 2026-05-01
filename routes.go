@@ -23,6 +23,11 @@ func newMux() http.Handler {
 	mux.HandleFunc("/v1/stats", handleStats)
 	mux.HandleFunc("/v1/stats/flush", handleStatsFlush)
 
+	// /anthropic 前缀兼容 — Hermes 通过 URL 后缀自动检测 api_mode
+	// 当 base_url 以 /anthropic 结尾时 Ananthropic SDK 拼接为 /anthropic/v1/messages
+	mux.HandleFunc("/anthropic/v1/messages", handleMessages)
+	mux.HandleFunc("/anthropic/v1/models", handleModels)
+
 	// Admin API
 	mux.HandleFunc("/admin/api/stats", handleAdminStats)
 	mux.HandleFunc("/admin/api/config", handleAdminConfig)
@@ -283,20 +288,24 @@ type AnthropicPassthroughAdapter struct {
 	cfg         *Config
 }
 
+
 func (a *AnthropicPassthroughAdapter) AdaptRequest(body map[string]any, _ map[string]string) *AdaptedRequest {
 	return &AdaptedRequest{
 		URL:    a.UpstreamURL,
 		Method: "POST",
 		Headers: map[string]string{
-			"content-type":      "application/json",
-			"x-api-key":         a.APIKey,
-			"anthropic-version": a.cfg.ZenAnthropicVersion,
+			"content-type": "application/json",
+			"x-api-key":    a.APIKey,
 		},
 		Body: body,
 	}
 }
 
 func (a *AnthropicPassthroughAdapter) AdaptResponse(body map[string]any, status int) *AdaptedResponse {
+	// Remove non-standard fields that the upstream may inject (e.g. opencode.ai adds base_resp, cost)
+	delete(body, "base_resp")
+	delete(body, "cost")
+
 	return &AdaptedResponse{
 		StatusCode: status,
 		Headers:    map[string]string{"content-type": "application/json"},
