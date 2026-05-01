@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # zen2api Termux 一键安装脚本
 # 用法: curl -sL https://raw.githubusercontent.com/ymymssss/zen2api-re/main/setup.sh | bash
@@ -153,7 +153,7 @@ step "创建 zen 快捷命令"
 ZEN_SCRIPT="$BIN_DIR/zen"
 
 cat > "$ZEN_SCRIPT" << 'ZENEOF'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # zen — zen2api 一键启动器
 # 用法: zen                          # 默认启动 (端口 9015)
@@ -322,12 +322,21 @@ if ! echo "$PATH" | grep -q "$BIN_DIR"; then
 fi
 
 # 添加 zen2api 默认环境变量到 RC 文件（如果还没加过）
-ZEN_ENV_BLOCK="# >>> zen2api 环境变量 (由 setup.sh 自动添加) >>>
+if [[ "$SHELL" == *"fish"* ]]; then
+    ZEN_ENV_BLOCK="# >>> zen2api 环境变量 (由 setup.sh 自动添加) >>>
+set -x ZEN2API_ENABLED 1
+set -x ZEN2API_PORT 9015
+set -x ZEN2API_HOST 127.0.0.1
+# set -x ZEN2API_KEY \"\"                # 取消注释并设置你的 API Key
+# <<< zen2api <<<"
+else
+    ZEN_ENV_BLOCK="# >>> zen2api 环境变量 (由 setup.sh 自动添加) >>>
 export ZEN2API_ENABLED=1
 export ZEN2API_PORT=9015
 export ZEN2API_HOST=127.0.0.1
 # export ZEN2API_KEY=\"\"                # 取消注释并设置你的 API Key
 # <<< zen2api <<<"
+fi
 
 if ! grep -q "zen2api 环境变量" "$RC_FILE" 2>/dev/null; then
     echo "" >> "$RC_FILE"
@@ -346,9 +355,10 @@ if command -v hermes &>/dev/null; then
 
     # 添加 zenlocal provider（使用 hermes config set 官方命令）
     hermes config set providers.zenlocal.name ZenLocal 2>/dev/null || true
-    hermes config set providers.zenlocal.base_url http://127.0.0.1:9015 2>/dev/null || true
+    hermes config set providers.zenlocal.base_url http://127.0.0.1:9015/anthropic 2>/dev/null || true
     hermes config set providers.zenlocal.transport anthropic_messages 2>/dev/null || true
     hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY 2>/dev/null || true
+    hermes config set providers.zenlocal.api_key noauth 2>/dev/null || true
 
     # 设为默认模型和 provider — 必须用 model.default / model.provider
     # 不能用 hermes config set model <value>（那会写成字符串，导致 provider 不生效）
@@ -356,7 +366,7 @@ if command -v hermes &>/dev/null; then
     hermes config set model.provider zenlocal 2>/dev/null || true
 
     info "Hermes 配置完成"
-    detail "provider: zenlocal → http://127.0.0.1:9015"
+    detail "provider: zenlocal → http://127.0.0.1:9015/anthropic"
     detail "transport: anthropic_messages"
     detail "通过 'hermes config show' 或 'hermes config edit' 查看/修改"
 else
@@ -364,9 +374,10 @@ else
     detail "安装 Hermes 后运行以下命令完成配置:"
     detail ""
     detail "  hermes config set providers.zenlocal.name ZenLocal"
-    detail "  hermes config set providers.zenlocal.base_url http://127.0.0.1:9015"
+    detail "  hermes config set providers.zenlocal.base_url http://127.0.0.1:9015/anthropic"
     detail "  hermes config set providers.zenlocal.transport anthropic_messages"
     detail "  hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY"
+    detail "  hermes config set providers.zenlocal.api_key noauth"
     detail "  hermes config set model.default minimax-m2.5-free"
     detail "  hermes config set model.provider zenlocal"
 fi
@@ -396,8 +407,8 @@ echo "│    http://127.0.0.1:9015/v1/messages    Anthropic Messages API    │"
 echo "│    http://127.0.0.1:9015/v1/chat/completions  OpenAI Chat API    │"
 echo "│                                                                      │"
 echo "│  Hermes 接入:                                                        │"
-echo "│    ZENLOCAL_API_KEY=\"any\" hermes -m \"minimax-m2.5-free\" \          │"
-echo "│        --provider zenlocal                                           │"
+echo "│    ZENLOCAL_API_KEY=\"noauth\" hermes -z \"你的问题\"                    │"
+echo "│    ZENLOCAL_API_KEY=\"noauth\" hermes chat -q \"你的问题\"               │"
 echo "│                                                                      │"
 echo "└──────────────────────────────────────────────────────────────────────┘"
 echo ""

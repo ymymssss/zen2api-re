@@ -173,12 +173,11 @@ func extractModelFromBody(body map[string]any) string {
 
 // normalizeModelName repairs model names that have had their dots turned into hyphens
 // by normalizers that assume Anthropic-style naming (e.g. minimax-m2-5-free → minimax-m2.5-free).
+// Only applies the repair when the model name does NOT already contain a dot,
+// otherwise a correctly-dotted name like minimax-m2.5-free would be broken into
+// minimax-m2.5.free by replacing the hyphen before "free".
 func normalizeModelName(model string) string {
-	// minimax-m2-5-free → minimax-m2.5-free, minimax-m2-7 → minimax-m2.7
-	// Pattern: minimax-m<digit(s)>-<rest> → minimax-m<digit(s)>.<rest>
-	if strings.HasPrefix(model, "minimax-") {
-		// After "minimax-m", replace the first hyphen with a dot
-		// minimax-m2-5-free → minimax-m2.5-free
+	if strings.HasPrefix(model, "minimax-") && !strings.Contains(model, ".") {
 		rest := strings.TrimPrefix(model, "minimax-")
 		if idx := strings.Index(rest, "-"); idx > 0 {
 			model = "minimax-" + rest[:idx] + "." + rest[idx+1:]

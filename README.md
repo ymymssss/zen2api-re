@@ -66,9 +66,10 @@ ZEN2API_ENABLED=1 ZEN2API_PORT=9015 ./zen2api
 ```bash
 # 添加 zenlocal provider
 hermes config set providers.zenlocal.name ZenLocal
-hermes config set providers.zenlocal.base_url http://127.0.0.1:9015
+hermes config set providers.zenlocal.base_url http://127.0.0.1:9015/anthropic
 hermes config set providers.zenlocal.transport anthropic_messages
 hermes config set providers.zenlocal.key_env ZENLOCAL_API_KEY
+hermes config set providers.zenlocal.api_key noauth
 
 # 设为默认模型和 provider — 注意必须用 dict 格式！
 # hermes config set model <value> 会写入字符串格式，导致 provider 不生效。
@@ -89,7 +90,7 @@ hermes config set model.provider zenlocal
 # oneshot 模式（推荐，最可靠）
 ZENLOCAL_API_KEY="noauth" hermes -z "你的问题"
 
-# 交互式 chat（需要上面 model.default + model.provider 都设对）
+# 交互式 chat（需要 model.default + model.provider 都设对）
 ZENLOCAL_API_KEY="noauth" hermes chat -q "你的问题"
 
 # 或者直接 hermes（进入交互 REPL）
