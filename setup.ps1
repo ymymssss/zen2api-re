@@ -288,6 +288,43 @@ step "配置环境变量"
 [Environment]::SetEnvironmentVariable("ZEN2API_HOST", "127.0.0.1", "User")
 info "环境变量已设置 (ZEN2API_ENABLED=1, ZEN2API_PORT=9015)"
 
+# ── Hermes Agent 安装 ────────────────────────────────────────────────────────────
+step "Hermes Agent 安装"
+
+$hermesCmd = Get-Command hermes -ErrorAction SilentlyContinue
+
+if ($hermesCmd) {
+    info "Hermes Agent 已安装，跳过"
+} else {
+    Write-Host ""
+    warn "Hermes Agent 未检测到"
+    detail "Hermes 是 NousResearch 的 AI Agent，可与 zen2api 配合使用，提供终端 AI 助手能力"
+    Write-Host ""
+    $reply = Read-Host "是否安装 Hermes Agent? (y/N)"
+    Write-Host ""
+    if ($reply -match '^[Yy]') {
+        $pipCmd = Get-Command pip -ErrorAction SilentlyContinue
+        if ($pipCmd) {
+            detail "正在安装 Hermes Agent (pip install hermes-agent)..."
+            pip install hermes-agent 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                info "Hermes Agent 安装成功"
+            } else {
+                warn "pip 安装失败，尝试官方安装脚本..."
+                detail "Windows 用户推荐通过 WSL2 安装: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+            }
+        } else {
+            warn "未检测到 pip，请先安装 Python"
+            detail "或通过 WSL2 安装 Hermes Agent:"
+            detail "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+        }
+    } else {
+        info "跳过 Hermes Agent 安装"
+        detail "可稍后手动安装: pip install hermes-agent"
+        detail "或 WSL2: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+    }
+}
+
 # ── Hermes 配置 ────────────────────────────────────────────────────────────────
 step "Hermes Agent 接入配置"
 

@@ -346,6 +346,35 @@ else
     info "环境变量已存在于 $RC_FILE，跳过"
 fi
 
+# ── Hermes Agent 安装 ────────────────────────────────────────────────────────
+step "Hermes Agent 安装"
+
+if command -v hermes &>/dev/null; then
+    info "Hermes Agent 已安装，跳过"
+else
+    echo ""
+    warn "Hermes Agent 未检测到"
+    detail "Hermes 是 NousResearch 的 AI Agent，可与 zen2api 配合使用，提供终端 AI 助手能力"
+    echo ""
+    read -r -p "是否安装 Hermes Agent? [y/N] " REPLY
+    echo ""
+    if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+        detail "正在安装 Hermes Agent..."
+        detail "安装脚本: https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh"
+        curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash || {
+            warn "Hermes Agent 安装失败"
+            detail "可稍后手动安装:"
+            detail "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+        }
+        if command -v hermes &>/dev/null; then
+            info "Hermes Agent 安装成功"
+        fi
+    else
+        info "跳过 Hermes Agent 安装"
+        detail "可稍后手动安装: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+    fi
+fi
+
 # ── Hermes 配置 ────────────────────────────────────────────────────────────
 step "Hermes Agent 接入配置"
 
