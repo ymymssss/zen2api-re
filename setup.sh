@@ -269,6 +269,9 @@ export ZEN2API_KILO_MODELS="${ZEN_KILO_MODELS:-kilo-auto/free,minimax/minimax-m2
 export ZEN2API_LOG_FILE="$ZEN_LOG"
 export ZEN2API_STATS_FILE="$HOME/zen2api/stats.json"
 
+# Termux/Android 兼容 — 指定 CA 证书位置
+[ -f /data/data/com.termux/files/usr/etc/tls/cert.pem ] && export SSL_CERT_FILE=/data/data/com.termux/files/usr/etc/tls/cert.pem
+
 echo "启动 zen2api ..."
 echo "  端口: $ZEN_PORT"
 echo "  管理面板: http://$ZEN_HOST:$ZEN_PORT/admin"

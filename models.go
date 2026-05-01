@@ -12,7 +12,12 @@ var (
 	modelCache       = map[string][]map[string]any{}
 	modelCacheExpiry = map[string]time.Time{}
 	modelLock        sync.RWMutex
-	modelClient      = &http.Client{Timeout: 20 * time.Second}
+	modelClient      = &http.Client{
+		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			DialContext: customDialer.DialContext,
+		},
+	}
 	modelsInitialized bool
 )
 

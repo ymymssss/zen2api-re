@@ -3,20 +3,38 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 )
 
+// customDialer 在 Android/Termux 环境下使用 8.8.8.8 做 DNS 解析，
+// 因为 Android 的 [::1]:53 DNS 代理可能没有运行。
+var customDialer = &net.Dialer{
+	Timeout:   30 * time.Second,
+	KeepAlive: 30 * time.Second,
+	Resolver: &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 10 * time.Second}
+			return d.DialContext(ctx, "udp", "8.8.8.8:53")
+		},
+	},
+}
+
 var proxyClient = &http.Client{
 	Timeout: 600 * time.Second,
 	Transport: &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 20,
-		IdleConnTimeout:     30 * time.Second,
+		DialContext:           customDialer.DialContext,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   20,
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
 	},
 }
 
