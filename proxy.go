@@ -166,7 +166,23 @@ func proxyStreamRequest(adapter Adapter, reqBody map[string]any, reqHeaders map[
 // extractModelFromBody tries to get the model name from a request body.
 func extractModelFromBody(body map[string]any) string {
 	if m, ok := body["model"].(string); ok {
-		return strings.TrimSpace(m)
+		return normalizeModelName(strings.TrimSpace(m))
 	}
 	return "unknown"
+}
+
+// normalizeModelName repairs model names that have had their dots turned into hyphens
+// by normalizers that assume Anthropic-style naming (e.g. minimax-m2-5-free → minimax-m2.5-free).
+func normalizeModelName(model string) string {
+	// minimax-m2-5-free → minimax-m2.5-free, minimax-m2-7 → minimax-m2.7
+	// Pattern: minimax-m<digit(s)>-<rest> → minimax-m<digit(s)>.<rest>
+	if strings.HasPrefix(model, "minimax-") {
+		// After "minimax-m", replace the first hyphen with a dot
+		// minimax-m2-5-free → minimax-m2.5-free
+		rest := strings.TrimPrefix(model, "minimax-")
+		if idx := strings.Index(rest, "-"); idx > 0 {
+			model = "minimax-" + rest[:idx] + "." + rest[idx+1:]
+		}
+	}
+	return model
 }

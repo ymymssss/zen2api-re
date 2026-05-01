@@ -132,6 +132,7 @@ func handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	model := extractModelFromBody(body)
+	body["model"] = model // repair dots-to-hyphens (e.g. minimax-m2-5-free -> minimax-m2.5-free)
 	useKilo := isKiloModel(model)
 
 	var adapter Adapter
