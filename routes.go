@@ -78,6 +78,10 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	body := readJSON(r)
 	stream, _ := body["stream"].(bool)
 
+	// Repair model name (Hermes may have converted dots to hyphens)
+	model := extractModelFromBody(body)
+	body["model"] = model
+
 	clientKey := extractKey(r)
 	if !GlobalRateLimiter.TryAcquire(clientKey) {
 		writeJSON(w, 429, map[string]any{"error": map[string]any{
@@ -178,6 +182,10 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body := readJSON(r)
+	// Repair model name (Hermes may have converted dots to hyphens)
+	model := extractModelFromBody(body)
+	body["model"] = model
+
 	clientKey := extractKey(r)
 
 	if !GlobalRateLimiter.TryAcquire(clientKey) {
